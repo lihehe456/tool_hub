@@ -115,6 +115,23 @@ def test_virtual_wall_builder_canvas_does_not_depend_on_wall_list_height(client)
     assert b"id=\"wall-files-panel\"" in response.data
 
 
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "/virtual-wall-builder/api/browse",
+        "/waypoint-task-builder/api/browse",
+        "/task-batch-generator/api/browse",
+        "/task-attribute-batch-generator/api/browse",
+    ],
+)
+def test_tool_browsers_allow_root_directory(client, endpoint):
+    response = client.post(endpoint, json={"path": "/"})
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["cwd"] == "/"
+
+
 def test_waypoint_task_builder_schema_and_load_save_apis(client, tmp_path):
     tasks_dir = tmp_path / "waypoint_tasks"
     tasks_dir.mkdir()

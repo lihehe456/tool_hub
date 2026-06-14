@@ -309,6 +309,14 @@ def test_attributes_returns_empty_lists_when_default_dirs_are_missing(tmp_path):
     assert payload["speed_modes_single"] == []
 
 
+def test_browse_allows_root_directory(client):
+    response = client.post("/api/browse", json={"path": "/"})
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["cwd"] == "/"
+
+
 def test_task_editor_source_page_includes_tab_hit_fix():
     tool_hub_app_dir = Path(__file__).resolve().parents[2]
     expected_markers = [

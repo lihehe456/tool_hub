@@ -199,6 +199,29 @@ def test_browse_maps_lists_yaml_files(client, sample_map):
     assert any(entry["name"] == "map.yaml" and entry["is_yaml"] for entry in payload["entries"])
 
 
+def test_browse_maps_allows_root_directory(client):
+    response = client.post("/api/browse_maps", json={"path": "/"})
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["cwd"] == "/"
+
+
+def test_load_map_allows_absolute_path_outside_configured_root(client, tmp_path):
+    map_dir = tmp_path / "outside_maps"
+    map_dir.mkdir()
+    pgm_path = map_dir / "outside.pgm"
+    yaml_path = map_dir / "outside.yaml"
+    pgm_path.write_bytes(b"P5\n1 1\n255\n\x00")
+    yaml_path.write_text("image: outside.pgm\nresolution: 0.05\norigin: [0.0, 0.0, 0.0]\n", encoding="utf-8")
+
+    response = client.post("/api/load_map", json={"yaml_path": str(yaml_path)})
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["origin"] == [0.0, 0.0, 0.0]
+
+
 def test_save_rename_delete_path_flow(client, sample_path_dir):
     save_path = sample_path_dir / "demo" / "route.json"
     renamed_path = sample_path_dir / "demo" / "route_2.json"
@@ -228,14 +251,14 @@ def test_save_rename_delete_path_flow(client, sample_path_dir):
     assert not renamed_path.exists()
 
 
-def test_rejects_paths_outside_configured_roots(client, tmp_path):
+def test_load_map_outside_configured_root_reports_missing_image_file(client, tmp_path):
     outside_map = tmp_path.parent / "outside.yaml"
     outside_map.write_text("image: no.pgm\nresolution: 0.05\norigin: [0, 0, 0]\n", encoding="utf-8")
 
     response = client.post("/api/load_map", json={"yaml_path": str(outside_map)})
 
-    assert response.status_code == 400
-    assert "error" in response.get_json()
+    assert response.status_code == 404
+    assert "PGM not found" in response.get_json()["error"]
 
 
 def test_server_module_can_be_loaded_from_package_directory(monkeypatch):

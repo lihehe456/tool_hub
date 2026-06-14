@@ -261,9 +261,16 @@ def register_task_editor(app, url_prefix=""):
     @blueprint.route(f"{api_prefix}/browse", methods=["POST"])
     def browse():
         default_browse_root = app.config.get("TASK_EDITOR_DEFAULT_BROWSE_ROOT") or str(default_task_editor_browse_root())
-        path = request.json.get("path", default_browse_root)
-        if not os.path.isdir(path):
-            path = os.path.dirname(path)
+        raw_path = (request.get_json(silent=True) or {}).get("path", default_browse_root)
+        path_obj = Path(raw_path or default_browse_root).expanduser()
+        if not path_obj.is_absolute():
+            path_obj = Path(default_browse_root).expanduser() / path_obj
+        path_obj = path_obj.resolve()
+        if not path_obj.exists():
+            path_obj = path_obj.parent
+        if not path_obj.is_dir():
+            path_obj = path_obj.parent
+        path = str(path_obj)
         entries = []
         try:
             for name in sorted(os.listdir(path)):
@@ -276,9 +283,9 @@ def register_task_editor(app, url_prefix=""):
                         "is_json": name.endswith(".json"),
                     }
                 )
-        except PermissionError:
+        except (FileNotFoundError, PermissionError):
             pass
-        return jsonify({"cwd": path, "parent": os.path.dirname(path), "entries": entries})
+        return jsonify({"cwd": path, "parent": str(path_obj.parent) if path_obj.parent != path_obj else str(path_obj), "entries": entries})
 
     @blueprint.route(f"{api_prefix}/save_task", methods=["POST"])
     def save_task():

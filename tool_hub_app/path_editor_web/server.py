@@ -142,9 +142,6 @@ def resolve_target(raw_path, root):
         target = root / target
     target = target.resolve()
 
-    if not is_within_root(target, root):
-        raise ValueError(f"Path is outside configured root: {target}")
-
     return target
 
 
@@ -306,7 +303,7 @@ def create_app(test_config=None):
         return jsonify(
             {
                 "cwd": str(target),
-                "parent": str(target.parent) if target != paths_root() else str(paths_root()),
+                "parent": str(target.parent) if target.parent != target else str(target),
                 "entries": build_entries(target, ".json"),
             }
         )
@@ -347,7 +344,7 @@ def create_app(test_config=None):
         return jsonify(
             {
                 "cwd": str(target),
-                "parent": str(target.parent) if target != maps_root() else str(maps_root()),
+                "parent": str(target.parent) if target.parent != target else str(target),
                 "entries": build_entries(target, ".yaml"),
             }
         )
