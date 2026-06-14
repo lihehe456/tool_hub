@@ -68,6 +68,10 @@ export function loadTaskWorkspace(workspacePath) {
   return postJson("/api/load_task_workspace", { workspace_path: workspacePath });
 }
 
+export function createTaskWorkspace(workspacePath) {
+  return loadTaskWorkspace(workspacePath);
+}
+
 export function saveTaskWorkspace(workspacePath, workspace) {
   return postJson("/api/save_task_workspace", { workspace_path: workspacePath, workspace });
 }
