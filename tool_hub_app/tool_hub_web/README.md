@@ -17,6 +17,12 @@
 USER_GUIDE.md
 ```
 
+HTTP 错误码整理请看：
+
+```text
+ERROR_CODES.md
+```
+
 ## 启动
 
 ```bash
