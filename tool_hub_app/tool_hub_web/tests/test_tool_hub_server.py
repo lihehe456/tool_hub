@@ -3,6 +3,30 @@ import pytest
 from tool_hub_web.server import create_app
 
 
+def write_ascii_pcd(path, points):
+    rows = "\n".join(f"{x} {y} {z}" for x, y, z in points)
+    path.write_text(
+        "\n".join(
+            [
+                "# .PCD v0.7 - Point Cloud Data file format",
+                "VERSION 0.7",
+                "FIELDS x y z",
+                "SIZE 4 4 4",
+                "TYPE F F F",
+                "COUNT 1 1 1",
+                f"WIDTH {len(points)}",
+                "HEIGHT 1",
+                "VIEWPOINT 0 0 0 1 0 0 0",
+                f"POINTS {len(points)}",
+                "DATA ascii",
+                rows,
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 @pytest.fixture
 def client():
     app = create_app({"TESTING": True})
@@ -19,6 +43,7 @@ def test_hub_home_and_tool_routes_are_available(client):
     task_batch_generator = client.get("/task-batch-generator")
     task_attribute_batch_generator = client.get("/task-attribute-batch-generator")
     virtual_wall_builder = client.get("/virtual-wall-builder")
+    pcd_to_map = client.get("/pcd-to-map")
 
     assert home.status_code == 200
     assert b"RY-Robot Tool Hub" in home.data
@@ -40,6 +65,8 @@ def test_hub_home_and_tool_routes_are_available(client):
     assert b"Task Attribute Batch Generator" in task_attribute_batch_generator.data
     assert virtual_wall_builder.status_code == 200
     assert b"Virtual Wall Builder" in virtual_wall_builder.data
+    assert pcd_to_map.status_code == 200
+    assert b"PCD to 2D Map" in pcd_to_map.data
 
 
 def test_waypoint_task_builder_runtime_config_exposes_current_root(client, tmp_path):
@@ -81,6 +108,7 @@ def test_task_editor_runtime_config_is_available_under_hub_mount(client):
         ("/task-batch-generator/api/runtime_config", "default_root"),
         ("/task-attribute-batch-generator/api/runtime_config", "default_root"),
         ("/virtual-wall-builder/api/runtime_config", "default_root"),
+        ("/pcd-to-map/api/runtime_config", "default_root"),
     ],
 )
 def test_tool_runtime_configs_default_to_opt_ry(client, endpoint, field):
@@ -140,6 +168,7 @@ def test_virtual_wall_builder_canvas_does_not_depend_on_wall_list_height(client)
         "/waypoint-task-builder/api/browse",
         "/task-batch-generator/api/browse",
         "/task-attribute-batch-generator/api/browse",
+        "/pcd-to-map/api/browse",
     ],
 )
 def test_tool_browsers_allow_root_directory(client, endpoint):
@@ -148,6 +177,61 @@ def test_tool_browsers_allow_root_directory(client, endpoint):
 
     assert response.status_code == 200
     assert payload["cwd"] == "/"
+
+
+def test_pcd_to_map_preview_and_export_apis(client, tmp_path):
+    pcd_path = tmp_path / "sample.pcd"
+    output_dir = tmp_path / "maps"
+    write_ascii_pcd(
+        pcd_path,
+        [
+            (0.0, 0.0, 0.2),
+            (0.05, 0.0, 0.2),
+            (0.0, 0.05, 0.2),
+            (1.0, 1.0, 1.2),
+            (1.05, 1.0, 1.2),
+            (1.0, 1.05, 1.2),
+        ],
+    )
+
+    preview_response = client.post(
+        "/pcd-to-map/api/preview",
+        json={
+            "pcd_path": str(pcd_path),
+            "resolution": 0.05,
+            "radius": 0.08,
+            "min_neighbors": 1,
+            "slices": [
+                {"id": "low", "z_min": 0.0, "z_max": 0.5},
+                {"id": "high", "z_min": 1.0, "z_max": 1.5},
+            ],
+        },
+    )
+    preview_payload = preview_response.get_json()
+
+    export_response = client.post(
+        "/pcd-to-map/api/export",
+        json={
+            "pcd_path": str(pcd_path),
+            "output_dir": str(output_dir),
+            "map_name": "selected_map",
+            "resolution": 0.05,
+            "radius": 0.08,
+            "min_neighbors": 1,
+            "slice": {"z_min": 1.0, "z_max": 1.5},
+        },
+    )
+    export_payload = export_response.get_json()
+
+    assert preview_response.status_code == 200
+    assert [item["id"] for item in preview_payload["slices"]] == ["low", "high"]
+    assert preview_payload["slices"][0]["point_count"] == 3
+    assert preview_payload["slices"][1]["origin"] == [1.0, 1.0, 0.0]
+    assert preview_payload["slices"][1]["preview_png_base64"]
+    assert export_response.status_code == 200
+    assert export_payload["ok"] is True
+    assert (output_dir / "selected_map.pgm").is_file()
+    assert (output_dir / "selected_map.yaml").is_file()
 
 
 def test_waypoint_task_builder_schema_and_load_save_apis(client, tmp_path):

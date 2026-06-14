@@ -36,6 +36,11 @@ try:
         preview_task_files,
         resolve_directory,
     )
+    from tool_hub_web.pcd_to_map import (
+        PcdToMapOptions,
+        convert_pcd_to_map,
+        export_map_files,
+    )
     from tool_hub_web.waypoint_task_builder import (
         load_waypoint_task_file,
         save_waypoint_task_file,
@@ -59,6 +64,11 @@ except ModuleNotFoundError:
         generate_task_files,
         preview_task_files,
         resolve_directory,
+    )
+    from tool_hub_web.pcd_to_map import (
+        PcdToMapOptions,
+        convert_pcd_to_map,
+        export_map_files,
     )
     from tool_hub_web.waypoint_task_builder import (
         load_waypoint_task_file,
@@ -126,6 +136,7 @@ def create_app(config=None):
                     "is_dir": child.is_dir(),
                     "is_yaml": child.is_file() and child.suffix.lower() in {".yaml", ".yml"},
                     "is_pgm": child.is_file() and child.suffix.lower() == ".pgm",
+                    "is_pcd": child.is_file() and child.suffix.lower() == ".pcd",
                 }
             )
         return {
@@ -138,6 +149,18 @@ def create_app(config=None):
         if value in (None, ""):
             return None
         return int(value)
+
+    def pcd_options_from_payload(payload, slice_payload):
+        transform = payload.get("odom_to_lidar_odom") or [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        return PcdToMapOptions(
+            z_min=float(slice_payload.get("z_min")),
+            z_max=float(slice_payload.get("z_max")),
+            resolution=float(payload.get("resolution", 0.05)),
+            radius=float(payload.get("radius", 0.5)),
+            min_neighbors=int(payload.get("min_neighbors", 10)),
+            flag_pass_through=bool(payload.get("flag_pass_through", False)),
+            odom_to_lidar_odom=tuple(float(value) for value in transform),
+        )
 
     @app.get("/hub-static/<path:filename>")
     def hub_static(filename):
@@ -166,6 +189,10 @@ def create_app(config=None):
     @app.get("/virtual-wall-builder")
     def virtual_wall_builder_page():
         return send_from_directory(STATIC_DIR, "virtual-wall-builder.html")
+
+    @app.get("/pcd-to-map")
+    def pcd_to_map_page():
+        return send_from_directory(STATIC_DIR, "pcd-to-map.html")
 
     @app.get("/waypoint-task-builder/api/runtime_config")
     def waypoint_task_builder_runtime_config():
@@ -198,6 +225,47 @@ def create_app(config=None):
                 "default_thickness": 0.1,
             }
         )
+
+    @app.get("/pcd-to-map/api/runtime_config")
+    def pcd_to_map_runtime_config():
+        return jsonify({"default_root": str(DEFAULT_USER_BROWSE_ROOT)})
+
+    @app.post("/pcd-to-map/api/browse")
+    def pcd_to_map_browse():
+        raw_path = (request.get_json(silent=True) or {}).get("path", str(DEFAULT_USER_BROWSE_ROOT))
+        try:
+            return jsonify(browse_absolute_path(raw_path, DEFAULT_USER_BROWSE_ROOT))
+        except ValueError as exc:
+            return json_error(str(exc), 400)
+
+    @app.post("/pcd-to-map/api/preview")
+    def pcd_to_map_preview():
+        payload = request.get_json(silent=True) or {}
+        try:
+            pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+            slices = payload.get("slices") or []
+            if not slices:
+                return json_error("slices is required", 400)
+            previews = []
+            for index, slice_payload in enumerate(slices):
+                result = convert_pcd_to_map(pcd_path, pcd_options_from_payload(payload, slice_payload))
+                previews.append(result.to_preview_dict(slice_payload.get("id", f"slice-{index + 1}")))
+        except (ValueError, TypeError, KeyError) as exc:
+            return json_error(str(exc), 400)
+        return jsonify({"slices": previews})
+
+    @app.post("/pcd-to-map/api/export")
+    def pcd_to_map_export():
+        payload = request.get_json(silent=True) or {}
+        try:
+            pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+            output_dir = resolve_user_path(payload.get("output_dir", ""), "output_dir")
+            slice_payload = payload.get("slice") or {}
+            result = convert_pcd_to_map(pcd_path, pcd_options_from_payload(payload, slice_payload))
+            exported = export_map_files(result, output_dir, payload.get("map_name", "map"))
+        except (ValueError, TypeError, KeyError) as exc:
+            return json_error(str(exc), 400)
+        return jsonify({"ok": True, **exported, "map": result.to_preview_dict()})
 
     @app.post("/virtual-wall-builder/api/browse")
     def virtual_wall_builder_browse():

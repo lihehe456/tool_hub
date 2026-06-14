@@ -23,6 +23,7 @@ a = Analysis(
         "path_editor_web.server",
         "path_editor_web.task_group_builder",
         "task_editor.server",
+        "tool_hub_web.pcd_to_map",
         "tool_hub_web.server",
         "tool_hub_web.virtual_wall_builder",
         "tool_hub_web.waypoint_task_builder",

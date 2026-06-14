@@ -10,6 +10,7 @@
 - `Task Batch Generator`
 - `Task Attribute Batch Generator`
 - `Virtual Wall Builder`
+- `PCD to 2D Map`
 
 详细使用说明请看：
 
@@ -91,6 +92,7 @@ tool_hub_app/tool_hub_web/dist/RY-Robot-Tool-Hub/
 - `/task-group-mixer`：任务组混编页
 - `/task-editor`：任务编辑器
 - `/waypoint-task-builder`：路点任务模板可视化编辑器
+- `/pcd-to-map`：点云切片转 2D 地图工具
 
 ## 说明
 
@@ -98,3 +100,4 @@ tool_hub_app/tool_hub_web/dist/RY-Robot-Tool-Hub/
 - `task_editor` 仍可单独运行
 - `tool_hub_web` 是新的统一入口，不替代旧工具的独立启动能力
 - `Waypoint Task Builder` 面向现有 `waypoint_tasks/*.xml` 模板，支持加载、树结构编辑、参数编辑、XML 预览和保存
+- `PCD to 2D Map` 按原 `pcd2pgm` 链路预览不同高度切片并导出 `PGM/YAML`

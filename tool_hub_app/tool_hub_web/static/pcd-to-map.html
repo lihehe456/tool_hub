@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCD to 2D Map</title>
+    <link rel="stylesheet" href="/hub-static/hub.css">
+    <style>
+      .pcd-shell {
+        max-width: 1480px;
+      }
+      .pcd-panel {
+        border: 1px solid #22303c;
+        border-radius: 16px;
+        background: rgba(15, 21, 29, 0.94);
+        padding: 1rem;
+      }
+      .pcd-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(180px, 1fr));
+        gap: 0.75rem;
+      }
+      .pcd-grid label,
+      .slice-row label {
+        display: grid;
+        gap: 0.35rem;
+        color: #8ca4b8;
+        font-size: 0.88rem;
+      }
+      .pcd-grid input,
+      .slice-row input,
+      .pcd-panel textarea {
+        width: 100%;
+        padding: 0.6rem 0.7rem;
+        border-radius: 10px;
+        border: 1px solid #314456;
+        background: #121b24;
+        color: #d6deeb;
+        font: inherit;
+      }
+      .pcd-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+        align-items: center;
+      }
+      .pcd-actions button,
+      .picker-header button,
+      .slice-row button {
+        padding: 0.62rem 0.8rem;
+        border-radius: 10px;
+        border: 1px solid #314456;
+        background: #183349;
+        color: #d6deeb;
+        font: inherit;
+        cursor: pointer;
+      }
+      .pcd-layout {
+        display: grid;
+        grid-template-columns: 430px minmax(520px, 1fr);
+        gap: 1rem;
+        align-items: start;
+      }
+      .slice-list,
+      .preview-list {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .slice-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 0.55rem;
+        align-items: end;
+      }
+      .preview-card {
+        border: 1px solid #22303c;
+        border-radius: 16px;
+        background: #101923;
+        padding: 0.9rem;
+        display: grid;
+        gap: 0.7rem;
+        cursor: pointer;
+      }
+      .preview-card[data-selected="true"] {
+        border-color: #4db0e8;
+        box-shadow: 0 0 0 1px rgba(77, 176, 232, 0.22);
+      }
+      .preview-card img {
+        width: 100%;
+        max-height: 420px;
+        object-fit: contain;
+        border-radius: 12px;
+        background: #05080c;
+        image-rendering: pixelated;
+      }
+      .pcd-muted,
+      .preview-meta {
+        color: #8ca4b8;
+        font-size: 0.84rem;
+        word-break: break-all;
+      }
+      .picker-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        background: rgba(5, 8, 12, 0.72);
+        align-items: center;
+        justify-content: center;
+      }
+      .picker-overlay.visible {
+        display: flex;
+      }
+      .picker-box {
+        width: min(820px, 92vw);
+        max-height: 74vh;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        border: 1px solid #22303c;
+        border-radius: 14px;
+        background: #0f151d;
+        overflow: hidden;
+      }
+      .picker-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.9rem 1rem;
+        border-bottom: 1px solid #22303c;
+      }
+      .picker-header span {
+        flex: 1;
+        color: #8ca4b8;
+        font-size: 0.82rem;
+        word-break: break-all;
+      }
+      .picker-list {
+        overflow: auto;
+        padding: 0.85rem;
+        display: grid;
+        gap: 0.45rem;
+      }
+      .picker-entry {
+        padding: 0.65rem 0.8rem;
+        border-radius: 10px;
+        border: 1px solid #22303c;
+        background: #121b24;
+      }
+      .picker-entry[data-clickable="true"] {
+        cursor: pointer;
+      }
+      .picker-entry[data-clickable="true"]:hover {
+        border-color: #4db0e8;
+      }
+      @media (max-width: 1180px) {
+        .pcd-grid,
+        .pcd-layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="picker-overlay" class="picker-overlay">
+      <div class="picker-box">
+        <div class="picker-header">
+          <strong id="picker-title">选择文件</strong>
+          <span id="picker-cwd"></span>
+          <button type="button" id="picker-select-dir">选择当前目录</button>
+          <button type="button" id="picker-up">上一级</button>
+          <button type="button" id="picker-close">关闭</button>
+        </div>
+        <div id="picker-list" class="picker-list"></div>
+      </div>
+    </div>
+
+    <main class="hub-page pcd-shell">
+      <header class="hub-hero">
+        <p class="hub-kicker">Point Cloud Slice</p>
+        <h1>PCD to 2D Map</h1>
+        <p class="hub-subtitle">按照原 pcd2pgm 算法链路预览不同高度范围的点云切片，选中满意的切片后直接导出 PGM/YAML。</p>
+        <p><a class="tool-link" href="/">返回导航页</a></p>
+      </header>
+
+      <section class="pcd-panel pcd-grid">
+        <label>
+          <span>PCD 文件</span>
+          <input id="pcd-path" type="text" placeholder="/opt/ry/.../map.pcd">
+        </label>
+        <label>
+          <span>输出目录</span>
+          <input id="output-dir" type="text" placeholder="/opt/ry/.../maps">
+        </label>
+        <label>
+          <span>地图名称</span>
+          <input id="map-name" type="text" value="map">
+        </label>
+        <div class="pcd-actions">
+          <button type="button" id="browse-pcd">浏览 PCD</button>
+          <button type="button" id="browse-output">浏览输出目录</button>
+        </div>
+      </section>
+
+      <section class="pcd-panel pcd-grid">
+        <label>
+          <span>分辨率 map_resolution</span>
+          <input id="resolution" type="number" step="0.01" value="0.05">
+        </label>
+        <label>
+          <span>半径 thre_radius</span>
+          <input id="radius" type="number" step="0.01" value="0.5">
+        </label>
+        <label>
+          <span>邻居数 thres_point_count</span>
+          <input id="min-neighbors" type="number" step="1" value="10">
+        </label>
+        <label>
+          <span>反选高度 flag_pass_through</span>
+          <input id="flag-pass-through" type="checkbox">
+        </label>
+        <label style="grid-column: 1 / -1;">
+          <span>odom_to_lidar_odom: x,y,z,roll,pitch,yaw</span>
+          <input id="transform" type="text" value="0,0,0,0,0,0">
+        </label>
+      </section>
+
+      <p id="pcd-status" class="hub-flow" data-error="false">准备就绪</p>
+
+      <section class="pcd-layout">
+        <article class="pcd-panel">
+          <h2>高度切片范围</h2>
+          <p class="pcd-muted">可以添加多个范围，一次性预览效果，再选择其中一个导出。</p>
+          <div id="slice-list" class="slice-list"></div>
+          <div class="pcd-actions">
+            <button type="button" id="add-slice">添加切片</button>
+            <button type="button" id="preview-slices">生成预览</button>
+            <button type="button" id="export-selected">导出选中切片</button>
+          </div>
+        </article>
+
+        <article class="pcd-panel">
+          <h2>切片预览</h2>
+          <div id="preview-list" class="preview-list">
+            <p class="pcd-muted">先设置高度范围并点击“生成预览”。</p>
+          </div>
+        </article>
+      </section>
+    </main>
+    <script src="/hub-static/pcd-to-map.js"></script>
+  </body>
+</html>

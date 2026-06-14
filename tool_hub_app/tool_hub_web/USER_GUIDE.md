@@ -28,6 +28,7 @@ RY-Robot Tool Hub
 - `Task Batch Generator`：按任务模板对批量生成任务组 JSON。
 - `Task Attribute Batch Generator`：按参考任务和模板 XML 批量生成路点任务属性 XML。
 - `Virtual Wall Builder`：加载 2D 地图并绘制虚拟墙，导出旧 `VirtualWallManager` 可加载的 YAML。
+- `PCD to 2D Map`：按 `pcd2pgm` 算法预览不同高度切片，并导出 `PGM/YAML` 地图。
 
 推荐主流程：
 
@@ -41,6 +42,7 @@ Path Editor -> Task Group Builder / Task Group Mixer -> Task Editor
 Waypoint Task Builder -> Task Editor
 Task Batch Generator -> Task Editor
 Task Attribute Batch Generator -> Task Editor
+PCD to 2D Map -> Path Editor / Virtual Wall Builder
 Virtual Wall Builder -> ROS VirtualWallManager
 ```
 
@@ -871,7 +873,91 @@ demo.workspace.json
 - `elevator_out_A_B` 等格式存在不同变体，工具会根据参考任务和模板识别。
 - 如果提示模板和参考任务楼层不匹配，需要检查源楼层、目标楼层和样本 XML 是否对应。
 
-## 12. Virtual Wall Builder
+## 12. PCD to 2D Map
+
+入口：
+
+```text
+/pcd-to-map
+```
+
+用途：
+
+- 读取 `.pcd` 点云文件。
+- 按原 `pcd2pgm` 算法链路生成 2D 占据栅格。
+- 一次预览多个高度范围切片。
+- 选择满意切片后导出 `map.pgm` 和 `map.yaml`。
+
+### 12.1 算法链路
+
+该功能对齐原 `pcd2pgm` 功能包：
+
+- 根据 `odom_to_lidar_odom` 对点云做逆变换。
+- 按 `Z min / Z max` 做 PassThrough 高度切片。
+- 根据 `flag_pass_through` 决定保留范围内点或反选范围外点。
+- 按 `thre_radius` 和 `thres_point_count` 做半径离群滤波。
+- 以过滤后点云的 `x_min / y_min` 作为地图 `origin`。
+- 按 `map_resolution` 投影到 XY 栅格。
+- 命中点的栅格作为占用区域导出。
+
+### 12.2 基本参数
+
+输入：
+
+- `PCD 文件`：绝对路径，例如 `/opt/ry/maps/demo/map.pcd`。
+- `输出目录`：生成 `pgm/yaml` 的目录。
+- `地图名称`：导出文件名前缀，例如 `map` 会生成 `map.pgm` 和 `map.yaml`。
+- `分辨率 map_resolution`：默认 `0.05`。
+- `半径 thre_radius`：半径离群滤波半径。
+- `邻居数 thres_point_count`：半径内最少点数。
+- `flag_pass_through`：勾选后反选高度范围。
+- `odom_to_lidar_odom`：`x,y,z,roll,pitch,yaw` 六个数。
+
+### 12.3 预览高度切片
+
+在 `高度切片范围` 中添加多个 `Z min / Z max`。
+
+点击：
+
+```text
+生成预览
+```
+
+页面会显示每个切片的：
+
+- 预览图。
+- 点数。
+- 地图宽高。
+- 分辨率。
+- 地图原点 `origin`。
+
+点击某个预览卡片即可选中该切片。
+
+### 12.4 导出地图
+
+选中预览切片后点击：
+
+```text
+导出选中切片
+```
+
+输出：
+
+```text
+<地图名称>.pgm
+<地图名称>.yaml
+```
+
+`yaml` 中的 `origin` 使用过滤后点云的最小 `x/y`，与原 `pcd2pgm` 生成 `OccupancyGrid` 的规则一致。
+
+注意事项：
+
+- 当前支持常见 `ascii` 和 `binary` PCD。
+- 暂不支持 `binary_compressed` PCD，遇到时会给出明确错误。
+- 点云很大时，预览多个切片会耗时，建议先用 2 到 3 个候选高度范围。
+- 导出的地图可直接用于 Path Editor 或 Virtual Wall Builder 加载。
+
+## 13. Virtual Wall Builder
 
 入口：
 
@@ -886,7 +972,7 @@ demo.workspace.json
 - 在网页画布中绘制、选择、移动、插点和删除虚拟墙。
 - 导出旧 `VirtualWallManager` 可直接加载的 YAML。
 
-### 12.1 加载地图
+### 13.1 加载地图
 
 展开 `地图文件` 面板。
 
@@ -908,7 +994,7 @@ demo.workspace.json
 - 地图建图原点。
 - 辅助网格。
 
-### 12.2 虚拟墙文件
+### 13.2 虚拟墙文件
 
 展开 `虚拟墙文件` 面板。
 
@@ -935,7 +1021,7 @@ demo.workspace.json
 image_relative / segments
 ```
 
-### 12.3 选择模式
+### 13.3 选择模式
 
 默认进入选择模式。
 
@@ -950,7 +1036,7 @@ image_relative / segments
 
 选择模式不会新增点，因此适合检查和微调。
 
-### 12.4 绘制模式
+### 13.4 绘制模式
 
 点击：
 
@@ -966,7 +1052,7 @@ image_relative / segments
 - `Backspace` 撤销当前未完成墙的最后一个点。
 - `Escape` 取消当前未完成墙。
 
-### 12.5 通用地图操作
+### 13.5 通用地图操作
 
 - 鼠标滚轮：缩放。
 - 鼠标右键拖动：平移。
@@ -975,7 +1061,7 @@ image_relative / segments
 - `撤销墙`：删除最后一条墙。
 - `清空`：清空所有墙和草稿。
 
-### 12.6 输出格式说明
+### 13.6 输出格式说明
 
 保存时会把世界坐标减去地图 YAML 的建图原点，生成 `image_relative` 坐标。
 
@@ -1001,9 +1087,9 @@ virtual_walls:
 - 保存前必须加载地图，否则无法确定 `map_origin`。
 - 一条墙至少需要 2 个点；删除点导致不足 2 点时，会自动删除整条墙。
 
-## 13. 打包与移交
+## 14. 打包与移交
 
-### 13.1 Ubuntu 打包
+### 14.1 Ubuntu 打包
 
 ```bash
 cd <repo>/tool_hub_app/tool_hub_web
@@ -1016,7 +1102,7 @@ bash build_linux.sh
 dist/RY-Robot-Tool-Hub/
 ```
 
-### 13.2 Windows 打包
+### 14.2 Windows 打包
 
 在 Windows 环境中执行：
 
@@ -1031,7 +1117,7 @@ build_windows.bat
 dist\RY-Robot-Tool-Hub\
 ```
 
-### 13.3 移交时需要包含
+### 14.3 移交时需要包含
 
 如果移交源码：
 
@@ -1047,7 +1133,7 @@ dist\RY-Robot-Tool-Hub\
 - 整个 `dist/RY-Robot-Tool-Hub/` 目录。
 - 外部业务数据目录，例如地图、路径、任务、路点任务 XML、速度模式等。
 
-### 13.4 常见问题
+### 14.4 常见问题
 
 端口占用：
 
@@ -1080,7 +1166,7 @@ Port 7791 is in use
 - 确认 YAML 中 `origin` 是目标地图的建图原点。
 - 不要把像素原点当成地图原点。
 
-## 14. 建议使用习惯
+## 15. 建议使用习惯
 
 - 路径修改后，手动重新生成子任务对，并替换工作区中的同源子任务对。
 - 任务组 JSON 和同名 `*.workspace.json` 建议一起保存。
