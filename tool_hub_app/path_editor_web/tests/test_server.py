@@ -117,6 +117,30 @@ def test_runtime_config_exposes_current_roots(client, sample_map, sample_path_di
     assert payload["maps_root"] == str(sample_map["dir"].parent)
 
 
+def test_runtime_config_defaults_to_opt_ry_work_root():
+    app = create_app({"TESTING": True})
+    client = app.test_client()
+
+    response = client.get("/api/runtime_config")
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["paths_root"] == "/opt/ry"
+    assert payload["maps_root"] == "/opt/ry"
+    assert payload["user_root"] == "/opt/ry"
+
+
+def test_browse_user_files_defaults_to_opt_ry_work_root():
+    app = create_app({"TESTING": True})
+    client = app.test_client()
+
+    response = client.post("/api/browse_user_files", json={})
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["cwd"] == "/opt/ry"
+
+
 def test_load_map_returns_png_and_metadata(client, sample_map):
     response = client.post("/api/load_map", json={"yaml_path": str(sample_map["yaml"])})
     payload = response.get_json()

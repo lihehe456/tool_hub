@@ -9,6 +9,7 @@ from flask import jsonify, request, send_from_directory
 try:
     from runtime_paths import (
         default_task_editor_browse_root,
+        default_user_browse_root,
         default_waypoint_attrs_root,
         default_waypoint_tasks_root,
     )
@@ -16,6 +17,7 @@ except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from runtime_paths import (
         default_task_editor_browse_root,
+        default_user_browse_root,
         default_waypoint_attrs_root,
         default_waypoint_tasks_root,
     )
@@ -75,6 +77,7 @@ DEFAULT_TASK_EDITOR_ATTRS_ROOT = default_waypoint_attrs_root()
 DEFAULT_TASK_EDITOR_BROWSE_ROOT = default_task_editor_browse_root()
 DEFAULT_TASK_BATCH_GENERATOR_ROOT = default_task_editor_browse_root()
 DEFAULT_TASK_ATTRIBUTE_BATCH_GENERATOR_ROOT = default_task_editor_browse_root()
+DEFAULT_USER_BROWSE_ROOT = default_user_browse_root()
 
 
 def create_app(config=None):
@@ -190,7 +193,7 @@ def create_app(config=None):
     def virtual_wall_builder_runtime_config():
         return jsonify(
             {
-                "default_root": str(Path.home()),
+                "default_root": str(DEFAULT_USER_BROWSE_ROOT),
                 "default_frame_id": "map",
                 "default_thickness": 0.1,
             }
@@ -198,9 +201,9 @@ def create_app(config=None):
 
     @app.post("/virtual-wall-builder/api/browse")
     def virtual_wall_builder_browse():
-        raw_path = (request.get_json(silent=True) or {}).get("path", str(Path.home()))
+        raw_path = (request.get_json(silent=True) or {}).get("path", str(DEFAULT_USER_BROWSE_ROOT))
         try:
-            return jsonify(browse_absolute_path(raw_path, Path.home()))
+            return jsonify(browse_absolute_path(raw_path, DEFAULT_USER_BROWSE_ROOT))
         except ValueError as exc:
             return json_error(str(exc), 400)
 

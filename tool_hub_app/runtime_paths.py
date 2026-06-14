@@ -1,6 +1,8 @@
 from pathlib import Path
 import sys
 
+DEFAULT_WORK_ROOT = Path("/opt/ry")
+
 
 def source_repo_root():
     return Path(__file__).resolve().parent
@@ -35,7 +37,7 @@ def packaged_or_source_path(*parts):
 
 
 def default_user_browse_root():
-    return Path.home()
+    return DEFAULT_WORK_ROOT
 
 
 def default_paths_root():

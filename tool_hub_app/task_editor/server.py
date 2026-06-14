@@ -341,11 +341,6 @@ def create_app(config=None, url_prefix=""):
         TASK_EDITOR_DEFAULT_BROWSE_ROOT=str(default_task_editor_browse_root()),
     )
     if config:
-        if "TASK_EDITOR_DEFAULT_BROWSE_ROOT" not in config and "ATTRS_DIR" in config:
-            config = {
-                **config,
-                "TASK_EDITOR_DEFAULT_BROWSE_ROOT": str(Path(config["ATTRS_DIR"]).resolve().parent),
-            }
         app.config.update(config)
     register_task_editor(app, url_prefix=url_prefix)
     return app

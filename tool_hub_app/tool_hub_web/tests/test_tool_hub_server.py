@@ -71,6 +71,24 @@ def test_task_editor_runtime_config_is_available_under_hub_mount(client):
     assert response.status_code == 200
     assert "default_waypoint_tasks_path" in payload
     assert "default_speed_modes_path" in payload
+    assert payload["default_browse_root"] == "/opt/ry"
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "field"),
+    [
+        ("/waypoint-task-builder/api/runtime_config", "waypoint_tasks_root"),
+        ("/task-batch-generator/api/runtime_config", "default_root"),
+        ("/task-attribute-batch-generator/api/runtime_config", "default_root"),
+        ("/virtual-wall-builder/api/runtime_config", "default_root"),
+    ],
+)
+def test_tool_runtime_configs_default_to_opt_ry(client, endpoint, field):
+    response = client.get(endpoint)
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload[field] == "/opt/ry"
 
 
 def test_virtual_wall_builder_save_and_load_apis(client, tmp_path):

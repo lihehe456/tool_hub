@@ -221,7 +221,7 @@ def test_runtime_config_exposes_attrs_and_default_browse_root(tmp_path):
 
     assert response.status_code == 200
     assert payload["attrs_dir"] == str(attrs_dir)
-    assert payload["default_browse_root"] == str(tmp_path)
+    assert payload["default_browse_root"] == "/opt/ry"
     assert payload["default_waypoint_tasks_path"] == str(attrs_dir / "waypoint_tasks")
     assert payload["default_speed_modes_path"] == str(attrs_dir / "speed_modes")
 
@@ -230,6 +230,11 @@ def test_source_runtime_paths_use_standalone_tool_hub_app_layout():
     tool_hub_app_dir = Path(__file__).resolve().parents[2]
 
     assert runtime_paths.source_repo_root() == tool_hub_app_dir
+    assert runtime_paths.default_user_browse_root() == Path("/opt/ry")
+    assert runtime_paths.default_paths_root() == Path("/opt/ry")
+    assert runtime_paths.default_maps_root() == Path("/opt/ry")
+    assert runtime_paths.default_waypoint_tasks_root() == Path("/opt/ry")
+    assert runtime_paths.default_task_editor_browse_root() == Path("/opt/ry")
     assert runtime_paths.default_waypoint_attrs_root() == (
         tool_hub_app_dir / "task_execute_server" / "waypoints_attributes"
     )

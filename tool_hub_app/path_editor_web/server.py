@@ -11,10 +11,10 @@ import yaml
 from flask import Flask, jsonify, request
 
 try:
-    from runtime_paths import default_maps_root, default_paths_root
+    from runtime_paths import default_maps_root, default_paths_root, default_user_browse_root
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from runtime_paths import default_maps_root, default_paths_root
+    from runtime_paths import default_maps_root, default_paths_root, default_user_browse_root
 
 try:
     from path_editor_web.task_group_builder import (
@@ -46,6 +46,7 @@ except ModuleNotFoundError:
 
 DEFAULT_PATHS_ROOT = default_paths_root()
 DEFAULT_MAPS_ROOT = default_maps_root()
+DEFAULT_USER_BROWSE_ROOT = default_user_browse_root()
 
 
 def parse_pgm(pgm_path):
@@ -237,7 +238,7 @@ def create_app(test_config=None):
             {
                 "paths_root": str(paths_root()),
                 "maps_root": str(maps_root()),
-                "user_root": str(Path.home()),
+                "user_root": str(DEFAULT_USER_BROWSE_ROOT),
             }
         )
 
@@ -310,7 +311,7 @@ def create_app(test_config=None):
 
     @app.post("/api/browse_user_files")
     def browse_user_files():
-        raw_path = (request.get_json(silent=True) or {}).get("path", str(Path.home()))
+        raw_path = (request.get_json(silent=True) or {}).get("path", str(DEFAULT_USER_BROWSE_ROOT))
         target = Path(raw_path).expanduser()
         if not target.is_absolute():
             return json_error("path must be an absolute path", 400)

@@ -3,14 +3,14 @@ import test from "node:test";
 
 import { startupBrowseRoot } from "../startup-policy.js";
 
-test("startupBrowseRoot uses user home instead of configured data roots", () => {
+test("startupBrowseRoot uses runtime work root instead of configured data roots", () => {
   assert.equal(
     startupBrowseRoot({
-      user_root: "/home/lmy",
+      user_root: "/opt/ry",
       paths_root: "/huge/paths",
       maps_root: "/huge/maps",
     }),
-    "/home/lmy",
+    "/opt/ry",
   );
 });
 
