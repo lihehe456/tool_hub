@@ -1,0 +1,46 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+
+      <!-- Step 1: 获取电梯ID -->
+      <GetElevatorId
+        community="中铁阅山湖云著"
+        building="11"
+        unit="0"
+        elevator_id="{elevator_id}"
+        success="{get_id_success}"/>
+
+      <!-- Step 2: 按电梯 -> 开门 -> 检测门状态，失败则重试 -->
+      <RetryUntilSuccessful num_attempts="10">
+        <Sequence name="CallAndCheckDoor">
+          <PublishTaskStatus status_code="200"/>
+          <!-- 2.1 呼叫电梯 -->
+          <ElevatorCaller
+            elevid="{elevator_id}"
+            target_floor="2"/>
+
+          <PublishTaskStatus status_code="209"/>
+
+          <!-- 2.2 发送开门指令 -->
+          <ElevatorDoorKeeper command="2+"/>
+
+          <!-- 2.3 视觉检测电梯门是否打开 (门未开则返回FAILURE，触发重试) -->
+          <ElevatorStatus
+            enable="true"
+            car_status="in"/>
+
+        </Sequence>
+      </RetryUntilSuccessful>
+
+      <PublishTaskStatus status_code="201"/>
+
+      <!-- Step 3: 门已打开，语音播报准备进入 -->
+      <!--WebVoicePlayer
+        text="我要进电梯啦，麻烦大家往里挤一挤，给我留个小角落，谢谢！"
+        loop_count="50"
+        loop_interval="2.0"/-->
+
+
+    </Sequence>
+  </BehaviorTree>
+</root>

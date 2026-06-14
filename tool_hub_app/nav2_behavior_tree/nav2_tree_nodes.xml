@@ -1,0 +1,541 @@
+<?xml version="1.0"?>
+<!--
+  For instructions on using Groot and description of the following BehaviorTree nodes,
+  please refer to the groot_instructions.md and REAMDE.md respectively located in the
+  nav2_behavior_tree package.
+-->
+<root>
+  <TreeNodesModel>
+    <!-- ############################### ACTION NODES ################################# -->
+    <Action ID="BackUp">
+      <input_port name="backup_dist">Distance to backup</input_port>
+      <input_port name="backup_speed">Speed at which to backup</input_port>
+      <input_port name="time_allowance">Allowed time for reversing</input_port>
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="MoveForward">
+      <input_port name="forward_dist">Distance to move forward</input_port>
+      <input_port name="forward_speed">Speed at which to move forward</input_port>
+      <input_port name="time_allowance">Allowed time for moving forward</input_port>
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="DriveOnHeading">
+      <input_port name="dist_to_travel">Distance to travel</input_port>
+      <input_port name="speed">Speed at which to travel</input_port>
+      <input_port name="time_allowance">Allowed time for reversing</input_port>
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="CancelControl">
+      <input_port name="server_name">Server name to cancel the controller server</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="CancelBackUp">
+      <input_port name="server_name">Server name to cancel the backup behavior</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="CancelDriveOnHeading">
+      <input_port name="server_name">Service name to cancel the drive on heading behavior</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="CancelSpin">
+      <input_port name="server_name">Server name to cancel the spin behavior</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="CancelAssistedTeleop">
+      <input_port name="server_name">Server name to cancel the assisted teleop behavior</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="CancelWait">
+      <input_port name="server_name">Server name to cancel the wait behavior</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="ClearEntireCostmap">
+      <input_port name="service_name">Service name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="ClearCostmapExceptRegion">
+      <input_port name="service_name">Service name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+      <input_port name="reset_distance">Distance from the robot above which obstacles are cleared</input_port>
+    </Action>
+
+    <Action ID="ClearCostmapAroundRobot">
+      <input_port name="service_name">Service name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+      <input_port name="reset_distance">Distance from the robot under which obstacles are cleared</input_port>
+    </Action>
+
+    <Action ID="ComputePathToPose">
+      <input_port name="goal">Destination to plan to</input_port>
+      <input_port name="start">Start pose of the path if overriding current robot pose</input_port>
+      <input_port name="planner_id">Mapped name to the planner plugin type to use</input_port>
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+      <output_port name="path">Path created by ComputePathToPose node</output_port>
+    </Action>
+
+    <Action ID="ComputePathThroughPoses">
+      <input_port name="goals">Destinations to plan through</input_port>
+      <input_port name="start">Start pose of the path if overriding current robot pose</input_port>
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+      <input_port name="planner_id">Mapped name to the planner plugin type to use</input_port>
+      <output_port name="path">Path created by ComputePathToPose node</output_port>
+    </Action>
+
+    <Action ID="RemovePassedGoals">
+      <input_port name="input_goals">Input goals to remove if passed</input_port>
+      <input_port name="radius">Radius tolerance on a goal to consider it passed</input_port>
+      <input_port name="global_frame">Global frame</input_port>
+      <input_port name="robot_base_frame">Robot base frame</input_port>
+      <output_port name="output_goals">Set of goals after removing any passed</output_port>
+    </Action>
+
+    <Action ID="RemovePassedGoalsHighSpeed">
+      <input_port name="input_goals">Input goals to remove if passed</input_port>
+      <input_port name="radius">Radius tolerance on a goal to consider it passed</input_port>
+      <input_port name="global_frame">Global frame</input_port>
+      <input_port name="robot_base_frame">Robot base frame</input_port>
+      <output_port name="output_goals">Set of goals after removing any passed</output_port>
+    </Action>
+
+    <Action ID="SmoothPath">
+      <input_port name="smoother_id" default="SmoothPath"/>
+      <input_port name="unsmoothed_path">Path to be smoothed</input_port>
+      <input_port name="max_smoothing_duration">Maximum smoothing duration</input_port>
+      <input_port name="check_for_collisions">Bool if collision check should be performed</input_port>
+      <output_port name="smoothed_path">Smoothed path</output_port>
+      <output_port name="smoothing_duration">Smoothing duration</output_port>
+      <output_port name="was_completed">True if smoothing was not interrupted by time limit</output_port>
+    </Action>
+
+    <Action ID="FollowPath">
+      <input_port name="controller_id" default="FollowPath"/>
+      <input_port name="path">Path to follow</input_port>
+      <input_port name="goal_checker_id">Goal checker</input_port>
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="NavigateToPose">
+        <input_port name="goal">Goal</input_port>
+        <input_port name="server_name">Server name</input_port>
+        <input_port name="server_timeout">Server timeout</input_port>
+        <input_port name="behavior_tree">Behavior tree to run</input_port>
+    </Action>
+
+    <Action ID="NavigateThroughPoses">
+        <input_port name="goals">Goals</input_port>
+        <input_port name="server_name">Server name</input_port>
+        <input_port name="server_timeout">Server timeout</input_port>
+        <input_port name="behavior_tree">Behavior tree to run</input_port>
+    </Action>
+
+    <Action ID="ReinitializeGlobalLocalization">
+        <input_port name="service_name">Service name</input_port>
+        <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="SetPoseFromOdom">
+        <input_port name="use_custom_cov" default="false">Use custom covariance values</input_port>
+        <input_port name="cov_x" default="0.5">Covariance in X direction</input_port>
+        <input_port name="cov_y" default="0.5">Covariance in Y direction</input_port>
+        <input_port name="cov_yaw" default="0.26">Covariance in Yaw</input_port>
+        <input_port name="server_name">Server name</input_port>
+        <input_port name="server_timeout">Server timeout</input_port>
+        <output_port name="pose">Resulting pose with covariance</output_port>
+        <output_port name="message">Result message from action</output_port>
+    </Action>
+
+    <Action ID="TruncatePath">
+        <input_port name="distance">Distance before goal to truncate</input_port>
+        <input_port name="input_path">Path to truncate</input_port>
+        <output_port name="output_path">Truncated path to utilize</output_port>
+    </Action>
+
+    <Action ID="TruncatePathLocal">
+      <input_port name="distance_forward">Distance in forward direction</input_port>
+      <input_port name="distance_backward">Distance in backward direction</input_port>
+      <input_port name="robot_frame">Robot base frame id</input_port>
+      <input_port name="transform_tolerance">Transform lookup tolerance</input_port>
+      <input_port name="pose">Manually specified pose to be used if overriding current robot pose</input_port>
+      <input_port name="angular_distance_weight">Weight of angular distance relative to positional distance when finding which path pose is closest to robot. Not applicable on paths without orientations assigned</input_port>
+      <input_port name="max_robot_pose_search_dist">Maximum forward integrated distance along the path (starting from the last detected pose) to bound the search for the closest pose to the robot. When set to infinity (default), whole path is searched every time</input_port>
+      <output_port name="output_path">Truncated path to utilize</output_port>
+    </Action>
+
+    <Action ID="PlannerSelector">
+        <input_port name="topic_name">Name of the topic to receive planner selection commands</input_port>
+        <input_port name="default_planner">Default planner of the planner selector</input_port>
+        <output_port name="selected_planner">Name of the selected planner received from the topic subcription</output_port>
+    </Action>
+
+    <Action ID="ControllerSelector">
+        <input_port name="topic_name">Name of the topic to receive controller selection commands</input_port>
+        <input_port name="default_controller">Default controller of the controller selector</input_port>
+        <output_port name="selected_controller">Name of the selected controller received from the topic subcription</output_port>
+    </Action>
+
+    <Action ID="SmootherSelector">
+        <input_port name="topic_name">Name of the topic to receive smoother selection commands</input_port>
+        <input_port name="default_smoother">Default smoother of the smoother selector</input_port>
+        <output_port name="selected_smoother">Name of the selected smoother received from the topic subcription</output_port>
+    </Action>
+
+    <Action ID="GoalCheckerSelector">
+        <input_port name="topic_name">Name of the topic to receive goal checker selection commands</input_port>
+        <input_port name="default_goal_checker">Default goal checker of the controller selector</input_port>
+        <output_port name="selected_goal_checker">Name of the selected goal checker received from the topic subcription</output_port>
+    </Action>
+
+    <Action ID="ProgressCheckerSelector">
+        <input_port name="topic_name">Name of the topic to receive progress checker selection commands</input_port>
+        <input_port name="default_progress_checker">Default progress checker of the controller selector</input_port>
+        <output_port name="selected_progress_checker">Name of the selected progress checker received from the topic subcription</output_port>
+    </Action>
+
+    <Action ID="Spin">
+      <input_port name="spin_dist">Spin distance</input_port>
+      <input_port name="time_allowance">Allowed time for spinning</input_port>
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="Wait">
+      <input_port name="wait_duration">Wait time</input_port>
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="AssistedTeleop">
+      <input_port name="time_allowance">Allowed time for spinning</input_port>
+      <input_port name="is_recovery">If true recovery count will be incremented</input_port>
+      <input_port name="server_name">Service name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="TakePhoto">
+      <input_port name="save_path">Path to save the captured photo</input_port>
+    </Action>
+
+    <Action ID="PhotoUpload">
+      <output_port name="file_url">Uploaded file URL</output_port>
+    </Action>
+
+    <Action ID="PtzTakePhoto">
+      <input_port name="pan_pos">PTZ Pan position</input_port>
+      <input_port name="tilt_pos">PTZ Tilt position</input_port>
+      <input_port name="zoom_pos">PTZ Zoom position</input_port>
+      <input_port name="save_path">Path to save the captured photo</input_port>
+      <input_port name="use_exact_go" default="true">Whether to use exact positioning (default: true)</input_port>
+      <output_port name="saved_path">Actual path where the photo was saved</output_port>
+      <output_port name="error_message">Error message if failed</output_port>
+    </Action>
+
+    <Action ID="ClampWater">
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="PlaceWater">
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="OpenPlatform">
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="ResetPlatform">
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+    </Action>
+
+    <Action ID="VirtualElevatorJudge">
+      <input_port name="topic_name">Topic to subscribe for elevator status</input_port>
+      <input_port name="timeout">Timeout in seconds to wait for elevator to open</input_port>
+      <input_port name="check_rate">Rate (Hz) to check the topic</input_port>
+    </Action>
+
+    <Action ID="ElevatorStatus">
+      <input_port name="enable">Enable elevator detection</input_port>
+      <input_port name="car_status">Camera position: 'in' or 'out'</input_port>
+      <input_port name="server_name">Server name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+      <output_port name="door_state">Detected door state</output_port>
+      <output_port name="confidence">Detection confidence</output_port>
+      <output_port name="result_message">Result message</output_port>
+    </Action>
+
+    <Action ID="ChangeUssStatus">
+      <input_port name="status">USS status to set (true/false)</input_port>
+    </Action>
+
+    <Action ID="SetTfBroadcast">
+      <input_port name="enable" default="true">Enable or disable TF broadcast</input_port>
+      <input_port name="x" default="0.0">X position</input_port>
+      <input_port name="y" default="0.0">Y position</input_port>
+      <input_port name="z" default="0.0">Z position</input_port>
+      <input_port name="odom_topic" default="odom">Odometry topic to subscribe for orientation</input_port>
+      <input_port name="service_name" default="set_tf_broadcast">Service name</input_port>
+      <output_port name="success">Service call success status</output_port>
+      <output_port name="message">Service response message</output_port>
+    </Action>
+
+    <Action ID="SetUseWheelOdom">
+      <input_port name="use_wheel_odom">Enable or disable wheel odometry localization (true/false)</input_port>
+      <input_port name="map_path"></input_port>
+      <input_port name="service_name" default="/localizer/relocalize">Service name</input_port>
+      <output_port name="success">Service call success status</output_port>
+      <output_port name="message">Service response message</output_port>
+    </Action>
+
+    <Action ID="SwitchMap">
+      <input_port name="map_url">Map URL (file:///path/to/map.yaml or package://pkg/map.yaml)</input_port>
+      <input_port name="service_name" default="/map_server/load_map">Service name</input_port>
+      <output_port name="result">Service call result code (0=success)</output_port>
+      <output_port name="result_message">Result message</output_port>
+    </Action>
+
+    <Action ID="ElevatorCaller">
+      <input_port name="target_floor">Target floor number to go to</input_port>
+      <input_port name="server_name" default="/elevator_command">Action server name</input_port>
+      <input_port name="server_timeout">Server timeout in milliseconds</input_port>
+      <output_port name="success">Whether successfully reached the target floor</output_port>
+      <output_port name="final_floor">The final floor where elevator stopped</output_port>
+      <output_port name="current_floor">Current floor (updated during execution)</output_port>
+    </Action>
+
+    <Action ID="ElevatorFloorChecker">
+      <input_port name="target_floor">Target floor number to match</input_port>
+      <input_port name="check_interval" default="1.0">Interval between checks in seconds</input_port>
+      <input_port name="server_name" default="elevator_floor_check">Action server name</input_port>
+      <input_port name="server_timeout">Server timeout in milliseconds</input_port>
+      <output_port name="current_floor">Current floor number</output_port>
+      <output_port name="floor_matched">Whether current floor matches target floor</output_port>
+      <output_port name="message">Result message from action</output_port>
+    </Action>
+
+    <Action ID="ElevatorDoorKeeper">
+      <input_port name="command" default="">Door command: 'open', 'close', 'hold', or empty string</input_port>
+      <input_port name="topic_name" default="/elevator_open">Topic name to publish door command</input_port>
+      <output_port name="success">Whether message was published successfully</output_port>
+    </Action>
+
+    <Action ID="RotateToAngle">
+      <input_port name="target_orientation">Target orientation as quaternion</input_port>
+      <input_port name="angular_velocity" default="0.5">Angular velocity in rad/s</input_port>
+      <input_port name="tolerance" default="5.0">Angular tolerance in degrees</input_port>
+      <input_port name="global_frame" default="map">Global frame</input_port>
+      <input_port name="robot_base_frame" default="base_link">Robot base frame</input_port>
+      <input_port name="cmd_vel_topic" default="/cmd_vel">Command velocity topic</input_port>
+      <input_port name="tf_topic" default="/tf">TF topic to subscribe</input_port>
+      <output_port name="current_angle">Current robot angle in degrees</output_port>
+      <output_port name="target_angle">Target angle in degrees</output_port>
+      <output_port name="angle_error">Angular error in degrees</output_port>
+    </Action>
+
+    <Action ID="RotateToGoalYawWithScan">
+      <input_port name="goal">Goal pose</input_port>
+      <input_port name="angular_velocity" default="0.3">Maximum angular velocity in rad/s</input_port>
+      <input_port name="min_angular_velocity" default="0.12">Minimum angular velocity in rad/s</input_port>
+      <input_port name="yaw_tolerance" default="0.0872665">Yaw tolerance in rad</input_port>
+      <input_port name="obstacle_distance_threshold" default="0.35">Pause rotation when an obstacle is closer than this distance</input_port>
+      <input_port name="obstacle_angle_window" default="6.28318530718">Scan angle window in rad; 2*pi checks the full scan</input_port>
+      <input_port name="scan_timeout" default="0.5">Maximum accepted scan age in seconds</input_port>
+      <input_port name="time_allowance" default="20.0">Maximum rotation time in seconds</input_port>
+      <input_port name="scan_topic" default="/scan">Laser scan topic</input_port>
+      <input_port name="global_frame" default="map">Global frame</input_port>
+      <input_port name="robot_base_frame" default="base_link">Robot base frame</input_port>
+      <input_port name="cmd_vel_topic" default="/cmd_vel">Command velocity topic</input_port>
+      <output_port name="current_yaw">Current robot yaw in rad</output_port>
+      <output_port name="goal_yaw">Goal yaw in rad</output_port>
+      <output_port name="yaw_error">Yaw error in rad</output_port>
+      <output_port name="obstacle_detected">Whether a blocking obstacle is detected</output_port>
+    </Action>
+
+    <Action ID="AMCLLifecycleManager">
+      <input_port name="node_name" default="/amcl">Target lifecycle node name</input_port>
+      <input_port name="transition" default="activate">Lifecycle transition: configure/activate/deactivate/cleanup/shutdown</input_port>
+      <input_port name="timeout" default="10.0">Operation timeout in seconds</input_port>
+      <input_port name="max_retries" default="3">Maximum number of retries on failure</input_port>
+      <input_port name="verify_state" default="true">Whether to verify target state after transition</input_port>
+      <input_port name="force_transition" default="false">Force transition even if already in target state</input_port>
+      <output_port name="current_state">Current lifecycle state</output_port>
+      <output_port name="target_state">Target lifecycle state</output_port>
+      <output_port name="transition_success">Whether transition was successful</output_port>
+      <output_port name="error_message">Error message if transition failed</output_port>
+      <output_port name="retry_count">Number of retries performed</output_port>
+    </Action>
+
+    <Action ID="GetElevatorId">
+      <input_port name="community">Community name</input_port>
+      <input_port name="building">Building number</input_port>
+      <input_port name="unit">Unit number</input_port>
+      <input_port name="floor">Floor number</input_port>
+      <input_port name="door">Door number</input_port>
+      <input_port name="service_name" default="get_elevator_id">Service name</input_port>
+      <output_port name="elevator_id">Retrieved elevator ID (also stored in blackboard)</output_port>
+      <output_port name="success">Service call success status</output_port>
+    </Action>
+
+    <Action ID="WebVoicePlayer">
+      <input_port name="text">Text content to synthesize and play</input_port>
+      <input_port name="model" default="cosyvoice-v1">TTS model name</input_port>
+      <input_port name="voice" default="longxiaochun">Voice name</input_port>
+      <input_port name="volume" default="50">Volume (0-100)</input_port>
+      <input_port name="rate" default="1.0">Speech rate (0.5-2.0)</input_port>
+      <input_port name="pitch" default="1.0">Pitch (0.5-2.0)</input_port>
+      <input_port name="sample_rate" default="22050">Audio sample rate</input_port>
+      <input_port name="format" default="mp3">Output audio format (mp3/wav/pcm)</input_port>
+      <input_port name="loop_count" default="1">Loop count (0=infinite, n=play n times)</input_port>
+      <input_port name="loop_interval" default="0.0">Interval between loops in seconds</input_port>
+      <input_port name="priority" default="0">Priority (0=normal, 1=high/interrupt)</input_port>
+      <output_port name="success">Whether playback was successful</output_port>
+      <output_port name="error_code">Error code (0=success)</output_port>
+      <output_port name="message">Result message</output_port>
+    </Action>
+
+    <Action ID="StopPlayback">
+      <input_port name="service_name" default="stop_playback">Service name</input_port>
+      <input_port name="server_timeout">Server timeout</input_port>
+      <output_port name="success">Whether playback was stopped successfully</output_port>
+      <output_port name="message">Result message</output_port>
+    </Action>
+
+    <Action ID="PublishTaskStatus">
+      <input_port name="status_code" default="000">Status_Code</input_port>
+      <output_port name="success">Whether playback was stopped successfully</output_port>
+      <output_port name="message">Result message</output_port>
+    </Action>
+
+    <!-- ############################### CONDITION NODES ############################## -->
+    <Condition ID="WaypointReached">
+      <input_port name="waypoint_index">Expected waypoint index to check</input_port>
+      <input_port name="topic_name">Topic name for current waypoint index</input_port>
+    </Condition>
+
+    <Condition ID="GoalReached">
+        <input_port name="goal">Destination</input_port>
+        <input_port name="global_frame">Reference frame</input_port>
+        <input_port name="robot_base_frame">Robot base frame</input_port>
+    </Condition>
+
+    <Condition ID="IsStuck"/>
+
+    <Condition ID="TransformAvailable">
+      <input_port name="child">Child frame for transform</input_port>
+      <input_port name="parent">Parent frame for transform</input_port>
+    </Condition>
+
+    <Condition ID="GoalUpdated"/>
+
+    <Condition ID="GlobalUpdatedGoal"/>
+
+    <Condition ID="IsBatteryLow">
+      <input_port name="min_battery">Min battery % or voltage before triggering</input_port>
+      <input_port name="battery_topic">Topic for battery info</input_port>
+      <input_port name="is_voltage">Bool if check based on voltage or total %</input_port>
+    </Condition>
+
+    <Condition ID="IsBatteryCharging">
+      <input_port name="battery_topic">Topic for battery info</input_port>
+    </Condition>
+
+    <Condition ID="SmartBatteryCondition">
+      <input_port name="battery_topic">电池状态话题</input_port>
+      <input_port name="low_battery_threshold">低电量阈值(百分比)</input_port>
+      <input_port name="charging_station_id">充电桩ID</input_port>
+      <input_port name="task_manager_service">任务管理服务</input_port>
+      <input_port name="auto_charging_enabled">是否启用自动充电</input_port>
+      <input_port name="charging_complete_threshold">充电完成阈值(百分比)</input_port>
+      <input_port name="check_interval_ms">检查间隔(毫秒)</input_port>
+    </Condition>
+
+    <Condition ID="DistanceTraveled">
+      <input_port name="distance">Distance to check if passed</input_port>
+      <input_port name="global_frame">reference frame to check in</input_port>
+      <input_port name="robot_base_frame">Robot frame to check relative to global_frame</input_port>
+    </Condition>
+
+    <Condition ID="TimeExpired">
+      <input_port name="seconds">Time to check if expired</input_port>
+    </Condition>
+
+
+    <Condition ID="PathExpiringTimer">
+      <input_port name="seconds">Time to check if expired</input_port>
+      <input_port name="path">Check if path has been updated to enable timer reset</input_port>
+    </Condition>
+
+    <Condition ID="InitialPoseReceived">
+    </Condition>
+
+    <Condition ID="IsPathValid">
+      <input_port name="path"> Path to validate </input_port>
+      <input_port name="server_timeout"> Server timeout </input_port>
+    </Condition>
+
+    <!-- ############################### CONTROL NODES ################################ -->
+    <Control ID="PipelineSequence"/>
+    
+    <Control ID="Fallback"/>
+    </Control>
+
+    <Control ID="RecoveryNode">
+      <input_port name="number_of_retries">Number of retries</input_port>
+    </Control>
+
+    <Control ID="RoundRobin"/>
+
+    <!-- ############################### DECORATOR NODES ############################## -->
+    <Decorator ID="RateController">
+      <input_port name="hz">Rate</input_port>
+    </Decorator>
+
+    <Decorator ID="DistanceController">
+      <input_port name="distance">Distance</input_port>
+      <input_port name="global_frame">Reference frame</input_port>
+      <input_port name="robot_base_frame">Robot base frame</input_port>
+    </Decorator>
+
+    <Decorator ID="SingleTrigger">
+    </Decorator>
+
+    <Decorator ID="GoalUpdater">
+      <input_port name="input_goal">Original goal in</input_port>
+      <output_port name="output_goal">Output goal set by subscription</output_port>
+    </Decorator>
+
+    <Decorator ID="SpeedController">
+      <input_port name="min_rate">Minimum rate</input_port>
+      <input_port name="max_rate">Maximum rate</input_port>
+      <input_port name="min_speed">Minimum speed</input_port>
+      <input_port name="max_speed">Maximum speed</input_port>
+    </Decorator>
+
+    <Decorator ID="PathLongerOnApproach">
+      <input_port name="path">Planned Path</input_port>
+      <input_port name="prox_len">Proximity length (m) for the path to be longer on approach</input_port>
+      <input_port name="length_factor">Length multiplication factor to check if the path is significantly longer </input_port>
+    </Decorator>
+
+    <Decorator ID="GoalUpdatedController">
+    </Decorator>
+
+  </TreeNodesModel>
+</root>

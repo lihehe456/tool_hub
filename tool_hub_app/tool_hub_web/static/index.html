@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RY-Robot Tool Hub</title>
+    <link rel="stylesheet" href="/hub-static/hub.css">
+  </head>
+  <body>
+    <main class="hub-page">
+      <header class="hub-hero">
+        <p class="hub-kicker">FusionCloudRobot</p>
+        <h1>RY-Robot Tool Hub</h1>
+        <p class="hub-subtitle">统一入口，集中访问路径编辑、任务组装配、任务组混编和任务编辑。</p>
+      </header>
+
+      <section class="hub-flow">
+        <strong>推荐流程</strong>
+        <span>Path Editor -> Task Group Builder / Task Group Mixer -> Task Editor</span>
+      </section>
+
+      <section id="tool-grid" class="tool-grid">
+        <article class="tool-card" data-tool="path-editor">
+          <h2>Path Editor</h2>
+          <p>编辑路径、加载地图，并从当前路径直接生成去程/返程子任务对。</p>
+          <p class="tool-scenario">适合从几何路径开始构建任务。</p>
+          <a class="tool-link" href="/path-editor">进入工具</a>
+        </article>
+        <article class="tool-card" data-tool="task-groups">
+          <h2>Task Group Builder</h2>
+          <p>从单个工作区中选择、排序、改名并导出任务组。</p>
+          <p class="tool-scenario">适合整理同一批子任务。</p>
+          <a class="tool-link" href="/task-groups">进入工具</a>
+        </article>
+        <article class="tool-card" data-tool="task-group-mixer">
+          <h2>Task Group Mixer</h2>
+          <p>导入多个旁路工作区，在独立混编工作区里自由组合任务对。</p>
+          <p class="tool-scenario">适合跨任务组混搭重组。</p>
+          <a class="tool-link" href="/task-group-mixer">进入工具</a>
+        </article>
+        <article class="tool-card" data-tool="task-editor">
+          <h2>Task Editor</h2>
+          <p>编辑任务组中的路点语义字段，并同步更新旁路 workspace 文件。</p>
+          <p class="tool-scenario">适合任务组生成后的语义微调。</p>
+          <a class="tool-link" href="/task-editor">进入工具</a>
+        </article>
+        <article class="tool-card" data-tool="waypoint-task-builder">
+          <h2>Waypoint Task Builder</h2>
+          <p>通过拖放和树结构编排生成路点任务 XML，并兼容现有 waypoint_tasks 模板目录。</p>
+          <p class="tool-scenario">适合维护门禁、电梯、状态切换等任务模板。</p>
+          <a class="tool-link" href="/waypoint-task-builder">进入工具</a>
+        </article>
+        <article class="tool-card" data-tool="task-batch-generator">
+          <h2>Task Batch Generator</h2>
+          <p>按目录识别 `n01/n03` 任务模板对，批量生成不同楼层的任务 JSON 文件。</p>
+          <p class="tool-scenario">适合基于一套模板快速派生整栋楼任务。</p>
+          <a class="tool-link" href="/task-batch-generator">进入工具</a>
+        </article>
+        <article class="tool-card" data-tool="task-attribute-batch-generator">
+          <h2>Task Attribute Batch Generator</h2>
+          <p>指定参考任务文件与样本属性 XML，批量生成并修正 waypoint task 属性文件。</p>
+          <p class="tool-scenario">适合批量派生电梯门控、进出电梯等任务属性模板。</p>
+          <a class="tool-link" href="/task-attribute-batch-generator">进入工具</a>
+        </article>
+        <article class="tool-card" data-tool="virtual-wall-builder">
+          <h2>Virtual Wall Builder</h2>
+          <p>加载 2D 地图，在网页中绘制虚拟墙，并导出旧 VirtualWallManager 可直接加载的 YAML。</p>
+          <p class="tool-scenario">适合脱离 RViz 后维护禁行边界和临时墙。</p>
+          <a class="tool-link" href="/virtual-wall-builder">进入工具</a>
+        </article>
+      </section>
+    </main>
+    <script src="/hub-static/hub.js"></script>
+  </body>
+</html>

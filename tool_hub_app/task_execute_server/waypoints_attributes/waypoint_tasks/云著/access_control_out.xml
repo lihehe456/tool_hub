@@ -1,0 +1,19 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="AccessControlOutSequence">
+      <ChangeUssStatus status="false"/>
+      <!-- 关闭 amcl定位 -->
+      <AMCLLifecycleManager transition="deactivate" />
+
+      <Wait wait_duration="1"/>
+
+      <!-- 关闭 TF 广播 -->
+      <SetTfBroadcast enable="false"/>
+      
+      <Wait wait_duration="1"/>
+
+      <SetUseWheelOdom use_wheel_odom="false"/>
+
+    </Sequence>
+  </BehaviorTree>
+</root>

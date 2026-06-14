@@ -1,0 +1,13 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <!-- 使用默认参数 -->
+      <WebVoicePlayer 
+  	text="我要进电梯啦，麻烦大家往里挤一挤，给我留个小角落，谢谢！" 
+  	loop_count="50"
+  	loop_interval="2.0"/>
+      <Wait wait_duration="5"/>
+      <!--StopPlayback service_name="/web_voice_player_action_server/stop_playback"/-->
+    </Sequence>
+  </BehaviorTree>
+</root>

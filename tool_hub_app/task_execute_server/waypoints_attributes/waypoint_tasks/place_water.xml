@@ -1,0 +1,13 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="NavigateWithUnloadingWater">
+      <ChangeUssStatus status="false"/>
+      <!--Spin spin_dist="3.14"-->
+      <PlaceWater name="place_water" server_timeout="50"/>
+
+      <MoveForward forward_dist="0.4" forward_speed="0.1" server_timeout="15"/>
+      <PublishTaskStatus status_code="103"/>
+      <WaitForReturnSignal timeout_sec="600"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

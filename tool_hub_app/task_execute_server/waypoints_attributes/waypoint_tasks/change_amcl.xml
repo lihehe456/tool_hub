@@ -1,0 +1,8 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaterDeliverySequence">
+    <AMCLLifecycleManager transition="configure" />
+    <AMCLLifecycleManager transition="activate" />
+    </Sequence>
+  </BehaviorTree>
+</root>

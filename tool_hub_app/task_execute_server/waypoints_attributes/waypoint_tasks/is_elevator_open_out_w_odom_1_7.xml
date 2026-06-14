@@ -1,0 +1,49 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <!-- 使用默认参数 -->
+      <!--VirtualElevatorJudge topic_name="/is_elevator_open"/-->
+      <GetElevatorId
+        community="摩根中心"
+        building="0"
+        unit="0"
+        elevator_id="{elevator_id}"
+        success="{get_id_success}"/>
+      <ElevatorDoorKeeper command="4-"/>
+      <PublishTaskStatus status_code="202"/>
+      <StopPlayback service_name="/web_voice_player_action_server/stop_playback"/>
+      <StopPlayback service_name="/web_voice_player_action_server/stop_playback"/>
+      <SwitchMap map_url="/home/ry/FusionCloudRobot_1212/FusionCloudRobot/maps/mogen_f7_new/map.yaml"/>
+      <SetTfBroadcast enable="true" x="0.0" y="0.0" z="0.0" qx="-0.0" qy="0.0" qz="-0.0" qw="1.0"/>
+      <Wait wait_duration="2"/>
+      <SetPoseFromOdom server_name="set_pose_from_odom" use_custom_cov="false"/>
+      <RetryUntilSuccessful num_attempts="10">
+        <Sequence name="CallAndCheckDoor">
+
+          <PublishTaskStatus status_code="200"/>
+
+          <!-- 2.1 呼叫电梯 -->
+          <ElevatorCaller
+            elevid="{elevator_id}"
+            target_floor="10"/>
+          <PublishTaskStatus status_code="209"/>
+
+          <!-- 2.2 发送开门指令 -->
+          <ElevatorDoorKeeper command="10+"/>
+
+          <!-- 2.3 视觉检测电梯门是否打开 (门未开则返回FAILURE，触发重试) -->
+          <ElevatorStatus
+            enable="true"
+            car_status="out"/>
+            
+        </Sequence>
+      </RetryUntilSuccessful>
+
+      
+      <WebVoicePlayer 
+  	    text="我要出电梯啦，请大家注意避让！"
+  	    loop_count="50"
+  	    loop_interval="2.0"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

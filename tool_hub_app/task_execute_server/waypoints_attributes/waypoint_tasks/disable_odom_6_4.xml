@@ -1,0 +1,11 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <!-- 使用默认参数 -->
+      <Wait wait_duration="5"/>
+      <ElevatorDoorKeeper command="4-"/>
+      
+      <!--SetTfBroadcast enable="false" /-->
+    </Sequence>
+  </BehaviorTree>
+</root>

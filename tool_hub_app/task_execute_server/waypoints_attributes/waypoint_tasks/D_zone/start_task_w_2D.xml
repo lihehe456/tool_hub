@@ -1,0 +1,9 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaterDeliverySequence">
+      <!-- 夹取水桶 -->
+      <!--ClampWater name="clamp_water"/-->
+      <SetUseWheelOdom use_wheel_odom="true"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

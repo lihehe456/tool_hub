@@ -1,0 +1,1 @@
+"""Path editor web package."""

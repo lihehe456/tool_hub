@@ -1,0 +1,9 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <!-- 使用默认参数 -->
+      <ChangeUssStatus status="false"/>
+      <PublishTaskStatus status_code="101"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

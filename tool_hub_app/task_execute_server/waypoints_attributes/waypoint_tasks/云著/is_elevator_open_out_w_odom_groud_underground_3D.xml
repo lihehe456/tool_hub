@@ -1,0 +1,27 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <!-- 使用默认参数 -->
+      <!--VirtualElevatorJudge topic_name="/is_elevator_open"/-->
+      <!--StopPlayback service_name="/web_voice_player_action_server/stop_playback"/-->
+      <SwitchMap map_url=""/>
+      <!--SetUseWheelOdom use_wheel_odom="true"/-->
+      <RetryUntilSuccessful num_attempts="10">
+        <Sequence name="CallAndCheckDoor">
+          <!-- 2.2 发送开门指令 -->
+
+          <!-- 2.3 视觉检测电梯门是否打开 (门未开则返回FAILURE，触发重试) -->
+          <ElevatorStatus
+            enable="true"
+            car_status="out"/>
+            
+        </Sequence>
+      </RetryUntilSuccessful>
+
+      <!--WebVoicePlayer 
+  	    text="我要出电梯啦，请大家注意避让！"
+  	    loop_count="50"
+  	    loop_interval="2.0"/-->
+    </Sequence>
+  </BehaviorTree>
+</root>

@@ -1,0 +1,11 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <!-- 使用默认参数 -->
+      <VirtualElevatorJudge/>
+      <VirtualElevatorJudge topic_name="/is_elevator_open"/>
+      <ElevatorStatus enable="true" 
+                     car_status="out"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

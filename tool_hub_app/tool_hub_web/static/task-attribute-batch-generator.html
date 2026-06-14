@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Attribute Batch Generator</title>
+    <link rel="stylesheet" href="/hub-static/hub.css">
+    <style>
+      .attr-shell {
+        display: grid;
+        gap: 1rem;
+      }
+      .attr-panel {
+        border: 1px solid #22303c;
+        border-radius: 16px;
+        background: rgba(15, 21, 29, 0.94);
+        padding: 1rem;
+      }
+      .attr-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: end;
+      }
+      .attr-toolbar label {
+        flex: 1 1 240px;
+        display: grid;
+        gap: 0.35rem;
+      }
+      .attr-toolbar input {
+        width: 100%;
+        padding: 0.6rem 0.7rem;
+        border-radius: 10px;
+        border: 1px solid #314456;
+        background: #121b24;
+        color: #d6deeb;
+        font: inherit;
+      }
+      .attr-layout {
+        display: grid;
+        grid-template-columns: minmax(340px, 0.95fr) minmax(440px, 1.2fr);
+        gap: 1rem;
+      }
+      .attr-preview-list {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .attr-preview-card {
+        border: 1px solid #22303c;
+        border-radius: 14px;
+        background: #121b24;
+        padding: 0.85rem;
+        display: grid;
+        gap: 0.45rem;
+      }
+      .attr-preview-meta,
+      .attr-rewrite {
+        color: #8ca4b8;
+        font-size: 0.84rem;
+        word-break: break-all;
+      }
+      .attr-inline {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .attr-inline label {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        color: #8ca4b8;
+        font-size: 0.84rem;
+      }
+      .picker-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 8, 12, 0.72);
+        align-items: center;
+        justify-content: center;
+      }
+      .picker-overlay.visible {
+        display: flex;
+      }
+      .picker-box {
+        width: min(760px, 92vw);
+        max-height: 72vh;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        border: 1px solid #22303c;
+        border-radius: 14px;
+        background: #0f151d;
+        overflow: hidden;
+      }
+      .picker-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.9rem 1rem;
+        border-bottom: 1px solid #22303c;
+      }
+      .picker-header span {
+        flex: 1;
+        color: #8ca4b8;
+        font-size: 0.82rem;
+        word-break: break-all;
+      }
+      .picker-list {
+        overflow: auto;
+        padding: 0.85rem;
+        display: grid;
+        gap: 0.45rem;
+      }
+      .picker-entry {
+        padding: 0.65rem 0.8rem;
+        border-radius: 10px;
+        border: 1px solid #22303c;
+        background: #121b24;
+        cursor: pointer;
+      }
+      .picker-entry.dir:hover,
+      .picker-entry.file:hover {
+        border-color: #4db0e8;
+      }
+      @media (max-width: 1180px) {
+        .attr-layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="picker-overlay" class="picker-overlay">
+      <div class="picker-box">
+        <div class="picker-header">
+          <strong id="picker-title">选择文件</strong>
+          <span id="picker-cwd"></span>
+          <button type="button" id="picker-select-dir">选择当前目录</button>
+          <button type="button" id="picker-close">关闭</button>
+        </div>
+        <div id="picker-list" class="picker-list"></div>
+      </div>
+    </div>
+
+    <main class="hub-page attr-shell">
+      <header class="hub-hero">
+        <p class="hub-kicker">Waypoint Attributes</p>
+        <h1>Task Attribute Batch Generator</h1>
+        <p class="hub-subtitle">手动指定参考任务文件与样本属性 XML，按任务家族规则批量生成 waypoint task 属性文件。</p>
+        <p><a class="tool-link" href="/">返回导航页</a></p>
+      </header>
+
+      <section class="attr-panel attr-toolbar">
+        <label>
+          <span>参考任务文件</span>
+          <input id="reference-task-path" type="text" placeholder="/abs/path/to/origin_tasks/demo.json">
+        </label>
+        <label>
+          <span>样本属性 XML</span>
+          <input id="template-xml-path" type="text" placeholder="/abs/path/to/waypoint_tasks/demo.xml">
+        </label>
+        <label>
+          <span>输出目录</span>
+          <input id="output-directory" type="text" placeholder="/abs/path/to/output">
+        </label>
+      </section>
+
+      <section class="attr-panel attr-toolbar">
+        <label>
+          <span>起始楼层</span>
+          <input id="start-floor" type="number" step="1" value="1">
+        </label>
+        <label>
+          <span>结束楼层</span>
+          <input id="end-floor" type="number" step="1" value="1">
+        </label>
+        <div class="attr-inline">
+          <button type="button" id="browse-task-button">浏览任务文件</button>
+          <button type="button" id="browse-xml-button">浏览属性 XML</button>
+          <button type="button" id="browse-output-button">浏览输出目录</button>
+          <label><input id="overwrite-toggle" type="checkbox"> overwrite</label>
+          <button type="button" id="preview-button">预览生成</button>
+          <button type="button" id="generate-button">开始生成</button>
+        </div>
+      </section>
+
+      <p id="attr-status" class="hub-flow" data-error="false">准备就绪</p>
+
+      <section class="attr-layout">
+        <article class="attr-panel">
+          <h2>识别结果</h2>
+          <div id="summary-panel" class="attr-preview-list">
+            <p class="panel-empty">请选择参考任务和样本属性 XML</p>
+          </div>
+        </article>
+        <article class="attr-panel">
+          <h2>生成预览</h2>
+          <div id="preview-list" class="attr-preview-list">
+            <p class="panel-empty">请点击“预览生成”</p>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        defaultRoot: "/",
+        browseCwd: "/",
+        pickerMode: "task",
+        preview: null,
+      };
+
+      const elements = {
+        referenceTaskPath: document.querySelector("#reference-task-path"),
+        templateXmlPath: document.querySelector("#template-xml-path"),
+        outputDirectory: document.querySelector("#output-directory"),
+        startFloor: document.querySelector("#start-floor"),
+        endFloor: document.querySelector("#end-floor"),
+        overwriteToggle: document.querySelector("#overwrite-toggle"),
+        browseTaskButton: document.querySelector("#browse-task-button"),
+        browseXmlButton: document.querySelector("#browse-xml-button"),
+        browseOutputButton: document.querySelector("#browse-output-button"),
+        previewButton: document.querySelector("#preview-button"),
+        generateButton: document.querySelector("#generate-button"),
+        status: document.querySelector("#attr-status"),
+        summaryPanel: document.querySelector("#summary-panel"),
+        previewList: document.querySelector("#preview-list"),
+        pickerOverlay: document.querySelector("#picker-overlay"),
+        pickerTitle: document.querySelector("#picker-title"),
+        pickerCwd: document.querySelector("#picker-cwd"),
+        pickerList: document.querySelector("#picker-list"),
+        pickerSelectDir: document.querySelector("#picker-select-dir"),
+        pickerClose: document.querySelector("#picker-close"),
+      };
+
+      function setStatus(message, error = false) {
+        elements.status.textContent = message;
+        elements.status.dataset.error = error ? "true" : "false";
+      }
+
+      async function runButtonFeedback(button, labels, operation) {
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = labels.pending;
+        try {
+          const result = await operation();
+          button.textContent = labels.success;
+          window.setTimeout(() => {
+            button.textContent = originalText;
+            button.disabled = false;
+          }, 1400);
+          return result;
+        } catch (error) {
+          button.textContent = labels.failure;
+          window.setTimeout(() => {
+            button.textContent = originalText;
+            button.disabled = false;
+          }, 1800);
+          throw error;
+        }
+      }
+
+      async function requestJson(url, options = {}) {
+        const response = await fetch(url, options);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || `Request failed: ${response.status}`);
+        }
+        return payload;
+      }
+
+      function renderSummary() {
+        if (!state.preview) {
+          elements.summaryPanel.innerHTML = '<p class="panel-empty">请选择参考任务和样本属性 XML</p>';
+          return;
+        }
+        const template = state.preview.template;
+        const reference = state.preview.reference;
+        elements.summaryPanel.innerHTML = `
+          <article class="attr-preview-card">
+            <strong>${template.attribute_type}</strong>
+            <div class="attr-preview-meta">模板: ${template.path}</div>
+            <div class="attr-preview-meta">参考任务: ${reference.reference_task_path}</div>
+            <div class="attr-preview-meta">固定楼层: ${reference.fixed_floor}</div>
+            <div class="attr-preview-meta">变化楼层: ${reference.variable_floor}</div>
+            <div class="attr-preview-meta">变体角色: ${template.variant_role}</div>
+          </article>
+        `;
+      }
+
+      function renderPreview() {
+        if (!state.preview) {
+          elements.previewList.innerHTML = '<p class="panel-empty">请点击“预览生成”</p>';
+          return;
+        }
+        elements.previewList.innerHTML = state.preview.generated_files.map((file) => `
+          <article class="attr-preview-card">
+            <strong>${file.output_name}</strong>
+            <div class="attr-preview-meta">${file.output_path}</div>
+            <div class="attr-preview-meta">类型: ${file.attribute_type} / ${file.variant_role}</div>
+            ${
+              file.rewrites.length
+                ? file.rewrites.map((rewrite) => `
+                  <div class="attr-rewrite">${rewrite.before} -> ${rewrite.after}</div>
+                `).join("")
+                : '<div class="attr-rewrite">无内容改写</div>'
+            }
+          </article>
+        `).join("");
+      }
+
+      function closePicker() {
+        elements.pickerOverlay.classList.remove("visible");
+      }
+
+      async function browseTo(path) {
+        const payload = await requestJson("/task-attribute-batch-generator/api/browse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path }),
+        });
+        state.browseCwd = payload.cwd;
+        elements.pickerCwd.textContent = payload.cwd;
+        elements.pickerList.innerHTML = "";
+
+        const up = document.createElement("div");
+        up.className = "picker-entry dir";
+        up.textContent = "..";
+        up.onclick = () => browseTo(payload.parent);
+        elements.pickerList.appendChild(up);
+
+        for (const entry of payload.entries) {
+          const item = document.createElement("div");
+          const isFile = !entry.is_dir;
+          item.className = "picker-entry " + (entry.is_dir ? "dir" : "file");
+          item.textContent = entry.name;
+          if (entry.is_dir) {
+            item.onclick = () => browseTo(entry.path);
+          } else if (state.pickerMode === "task" && entry.is_json) {
+            item.onclick = () => {
+              elements.referenceTaskPath.value = entry.path;
+              closePicker();
+            };
+          } else if (state.pickerMode === "xml" && entry.is_xml) {
+            item.onclick = () => {
+              elements.templateXmlPath.value = entry.path;
+              closePicker();
+            };
+          } else if (state.pickerMode === "output" && isFile) {
+            item.style.opacity = "0.45";
+          }
+          elements.pickerList.appendChild(item);
+        }
+      }
+
+      function openPicker(mode) {
+        state.pickerMode = mode;
+        elements.pickerTitle.textContent =
+          mode === "task" ? "选择参考任务文件" :
+          mode === "xml" ? "选择样本属性 XML" :
+          "选择输出目录";
+        elements.pickerSelectDir.style.display = mode === "output" ? "inline-flex" : "none";
+        elements.pickerOverlay.classList.add("visible");
+        const initialPath =
+          mode === "task" ? (elements.referenceTaskPath.value.trim() || state.defaultRoot) :
+          mode === "xml" ? (elements.templateXmlPath.value.trim() || state.defaultRoot) :
+          (elements.outputDirectory.value.trim() || state.defaultRoot);
+        browseTo(initialPath).catch((error) => {
+          setStatus(error.message, true);
+          closePicker();
+        });
+      }
+
+      async function loadRuntimeConfig() {
+        const payload = await requestJson("/task-attribute-batch-generator/api/runtime_config");
+        state.defaultRoot = payload.default_root || "/";
+        elements.outputDirectory.value = state.defaultRoot;
+      }
+
+      function pickerSelectCurrentDir() {
+        elements.outputDirectory.value = state.browseCwd;
+        closePicker();
+      }
+
+      async function previewAttributes() {
+        try {
+          const payload = await requestJson("/task-attribute-batch-generator/api/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              reference_task_path: elements.referenceTaskPath.value.trim(),
+              template_xml_path: elements.templateXmlPath.value.trim(),
+              start: Number(elements.startFloor.value),
+              end: Number(elements.endFloor.value),
+              output_dir: elements.outputDirectory.value.trim(),
+            }),
+          });
+          state.preview = payload;
+          renderSummary();
+          renderPreview();
+          setStatus(`预览完成: ${payload.generated_files.length} 个属性文件`, false);
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      }
+
+      async function generateAttributes() {
+        try {
+          await runButtonFeedback(
+            elements.generateButton,
+            { pending: "生成中...", success: "已生成", failure: "生成失败" },
+            async () => {
+              setStatus("正在生成任务属性文件...", false);
+              const payload = await requestJson("/task-attribute-batch-generator/api/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  reference_task_path: elements.referenceTaskPath.value.trim(),
+                  template_xml_path: elements.templateXmlPath.value.trim(),
+                  start: Number(elements.startFloor.value),
+                  end: Number(elements.endFloor.value),
+                  output_dir: elements.outputDirectory.value.trim(),
+                  overwrite: elements.overwriteToggle.checked,
+                }),
+              });
+              state.preview = payload;
+              renderSummary();
+              renderPreview();
+              setStatus(`生成成功: ${payload.created_files.length} 个属性文件`, false);
+            },
+          );
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      }
+
+      elements.browseTaskButton.addEventListener("click", () => openPicker("task"));
+      elements.browseXmlButton.addEventListener("click", () => openPicker("xml"));
+      elements.browseOutputButton.addEventListener("click", () => openPicker("output"));
+      elements.pickerSelectDir.addEventListener("click", pickerSelectCurrentDir);
+      elements.pickerClose.addEventListener("click", closePicker);
+      elements.previewButton.addEventListener("click", previewAttributes);
+      elements.generateButton.addEventListener("click", generateAttributes);
+
+      loadRuntimeConfig()
+        .then(() => {
+          renderSummary();
+          renderPreview();
+          setStatus("准备就绪", false);
+        })
+        .catch((error) => setStatus(error.message, true));
+    </script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <!-- 使用默认参数 -->
+      <!--StopPlayback service_name="stop_playback"/-->
+      <!--DoorControl service_name="/door_control" executeid="1" success="{door_success}" stateid="{door_state}"/-->
+      <SetTfBroadcast enable="true" x="-42.45" y="48.86" z="0.0" qx="-0.0" qy="0.0" qz="0.715" qw="0.698"/>
+      <EnableAmcl service_name="/enable_amcl" data="true"/>
+      <SetPoseFromOdom server_name="set_pose_from_odom" use_custom_cov="false"/>
+      <SetUseWheelOdom use_wheel_odom="true"/>
+      <ChangeUssStatus status="true"/>
+      <RetryUntilSuccessful num_attempts="10">
+        <Sequence name="CallAndCheckDoor">
+        <PublishTaskStatus status_code="300"/>
+        <!--DoorControl service_name="/door_control" doorid="2" executeid="2" success="{door_success}" stateid="{door_state}"/-->           
+        
+        </Sequence>
+      </RetryUntilSuccessful>
+      <PublishTaskStatus status_code="303"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

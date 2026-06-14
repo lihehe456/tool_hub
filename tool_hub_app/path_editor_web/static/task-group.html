@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Group Builder</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="task-group-page">
+      <header class="task-group-header">
+        <h1>Task Group Builder</h1>
+        <p id="workspace-meta">未加载工作区</p>
+        <a class="task-group-link" href="/task-group-mixer">打开 Task Group Mixer</a>
+      </header>
+
+      <section class="task-group-toolbar">
+        <label>
+          <span>工作区文件</span>
+          <input id="workspace-path" type="text" placeholder="/abs/path/to/task-group-workspace.json">
+        </label>
+        <button id="load-workspace-button" type="button">加载工作区</button>
+      </section>
+
+      <p id="task-group-status" data-error="false">等待载入工作区</p>
+
+      <section class="task-group-toolbar">
+        <label>
+          <span>任务组名称</span>
+          <input id="task-group-name" type="text" placeholder="delivery_demo">
+        </label>
+        <label>
+          <span>导出目录</span>
+          <input id="output-task-path" type="text" placeholder="/abs/path/to/output-directory">
+        </label>
+        <button id="export-task-group-button" type="button">导出任务组</button>
+        <button id="clear-subtasks-button" type="button">清空子任务</button>
+      </section>
+
+      <section class="task-group-columns">
+        <article class="task-group-panel">
+          <h2>全部子任务</h2>
+          <div id="available-subtasks"></div>
+        </article>
+        <article class="task-group-panel">
+          <h2>当前任务组</h2>
+          <div id="selected-subtasks"></div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="/static/task-group-app.js"></script>
+  </body>
+</html>

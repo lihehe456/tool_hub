@@ -1,0 +1,16 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="AccessControlInSequence">
+      <!--ChangeUssStatus status="true"/-->
+      <!-- 启用轮式里程计定位 -->
+      <SetUseWheelOdom use_wheel_odom="true"/>
+      <!-- 启用 TF 广播（使用第n个点） -->
+      <SetTfBroadcast enable="true"  x="-12.12" y="96.8" z="0.0" qx="0.0" qy="0.0" qz="0.0" qw="1.0"/>
+      <!-- 启用 amcl定位 -->
+      <AMCLLifecycleManager transition="configure" />
+      <Wait wait_duration="2"/>
+      <AMCLLifecycleManager transition="activate" />
+      <!--SetPoseFromOdom server_name="set_pose_from_odom" use_custom_cov="false"/-->
+    </Sequence>
+  </BehaviorTree>
+</root>

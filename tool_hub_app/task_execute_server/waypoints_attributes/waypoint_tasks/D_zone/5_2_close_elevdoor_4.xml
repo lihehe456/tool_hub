@@ -1,0 +1,10 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <!-- 使用默认参数 -->
+      <PublishTaskStatus status_code="203"/>
+      <StopPlayback service_name="/web_voice_player_action_server/stop_playback"/>
+      <ElevatorDoorKeeper command="4-"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

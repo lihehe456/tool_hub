@@ -1,0 +1,978 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Wall Builder</title>
+    <link rel="stylesheet" href="/hub-static/hub.css">
+    <style>
+      .wall-shell {
+        max-width: 1500px;
+      }
+      .wall-panel {
+        border: 1px solid #22303c;
+        border-radius: 16px;
+        background: rgba(15, 21, 29, 0.94);
+        padding: 1rem;
+      }
+      .wall-toolbar-shell {
+        display: grid;
+        gap: 0.8rem;
+      }
+      .wall-collapsible {
+        border: 1px solid #22303c;
+        border-radius: 16px;
+        background: rgba(15, 21, 29, 0.94);
+        overflow: hidden;
+      }
+      .wall-collapsible > summary {
+        padding: 0.9rem 1rem;
+        list-style: none;
+        cursor: pointer;
+        color: #d6deeb;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+      .wall-collapsible > summary::-webkit-details-marker {
+        display: none;
+      }
+      .wall-collapsible > summary::after {
+        content: "▾";
+        color: #8ca4b8;
+        font-size: 0.85rem;
+      }
+      .wall-collapsible[open] > summary::after {
+        content: "▴";
+      }
+      .wall-collapsible-body {
+        padding: 0 1rem 1rem;
+      }
+      .wall-toolbar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(260px, 1fr));
+        gap: 0.8rem;
+      }
+      .wall-toolbar label,
+      .wall-side label {
+        display: grid;
+        gap: 0.35rem;
+        color: #8ca4b8;
+        font-size: 0.9rem;
+      }
+      .wall-toolbar input,
+      .wall-side input,
+      .wall-side textarea {
+        width: 100%;
+        padding: 0.6rem 0.7rem;
+        border-radius: 10px;
+        border: 1px solid #314456;
+        background: #121b24;
+        color: #d6deeb;
+        font: inherit;
+      }
+      .wall-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+        align-items: center;
+      }
+      .wall-actions button,
+      .picker-header button {
+        padding: 0.62rem 0.8rem;
+        border-radius: 10px;
+        border: 1px solid #314456;
+        background: #183349;
+        color: #d6deeb;
+        font: inherit;
+        cursor: pointer;
+      }
+      .mode-button[data-active="true"] {
+        border-color: #4db0e8;
+        background: #24506d;
+        box-shadow: 0 0 0 1px rgba(77, 176, 232, 0.22);
+      }
+      .wall-layout {
+        display: grid;
+        grid-template-columns: minmax(620px, 1fr) 360px;
+        gap: 1rem;
+        align-items: start;
+      }
+      .canvas-wrap {
+        align-self: start;
+        height: min(82vh, 920px);
+        min-height: 720px;
+        border: 1px solid #22303c;
+        border-radius: 16px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 20% 10%, rgba(77, 176, 232, 0.12), transparent 28%),
+          #090e13;
+      }
+      #wall-canvas {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        display: block;
+        cursor: crosshair;
+      }
+      .wall-side {
+        display: grid;
+        align-content: start;
+        gap: 1rem;
+        max-height: min(82vh, 920px);
+        overflow: auto;
+      }
+      .wall-list {
+        display: grid;
+        gap: 0.5rem;
+        max-height: 280px;
+        overflow: auto;
+      }
+      .wall-item {
+        padding: 0.65rem;
+        border: 1px solid #22303c;
+        border-radius: 12px;
+        background: #121b24;
+        cursor: pointer;
+      }
+      .wall-item[data-selected="true"] {
+        border-color: #4db0e8;
+        box-shadow: 0 0 0 1px rgba(77, 176, 232, 0.22);
+      }
+      .wall-muted {
+        color: #8ca4b8;
+        font-size: 0.84rem;
+        word-break: break-all;
+      }
+      .picker-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        background: rgba(5, 8, 12, 0.72);
+        align-items: center;
+        justify-content: center;
+      }
+      .picker-overlay.visible {
+        display: flex;
+      }
+      .picker-box {
+        width: min(820px, 92vw);
+        max-height: 74vh;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        border: 1px solid #22303c;
+        border-radius: 14px;
+        background: #0f151d;
+        overflow: hidden;
+      }
+      .picker-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.9rem 1rem;
+        border-bottom: 1px solid #22303c;
+      }
+      .picker-header span {
+        flex: 1;
+        color: #8ca4b8;
+        font-size: 0.82rem;
+        word-break: break-all;
+      }
+      .picker-list {
+        overflow: auto;
+        padding: 0.85rem;
+        display: grid;
+        gap: 0.45rem;
+      }
+      .picker-entry {
+        padding: 0.65rem 0.8rem;
+        border-radius: 10px;
+        border: 1px solid #22303c;
+        background: #121b24;
+      }
+      .picker-entry[data-clickable="true"] {
+        cursor: pointer;
+      }
+      .picker-entry[data-clickable="true"]:hover {
+        border-color: #4db0e8;
+      }
+      @media (max-width: 1160px) {
+        .wall-toolbar,
+        .wall-layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="picker-overlay" class="picker-overlay">
+      <div class="picker-box">
+        <div class="picker-header">
+          <strong id="picker-title">选择 YAML</strong>
+          <span id="picker-cwd"></span>
+          <button type="button" id="picker-up">上一级</button>
+          <button type="button" id="picker-close">关闭</button>
+        </div>
+        <div id="picker-list" class="picker-list"></div>
+      </div>
+    </div>
+
+    <main class="hub-page wall-shell">
+      <header class="hub-hero">
+        <p class="hub-kicker">Virtual Boundary</p>
+        <h1>Virtual Wall Builder</h1>
+        <p class="hub-subtitle">加载 2D 地图，点击绘制虚拟墙折线，保存为旧 VirtualWallManager 兼容的 `image_relative / segments` YAML。</p>
+        <p><a class="tool-link" href="/">返回导航页</a></p>
+      </header>
+
+      <section class="wall-toolbar-shell">
+        <details class="wall-collapsible" id="map-files-panel">
+          <summary>地图文件</summary>
+          <div class="wall-collapsible-body">
+            <div class="wall-panel wall-toolbar">
+              <label>
+                <span>地图 YAML</span>
+                <input id="map-path" type="text" placeholder="/abs/path/to/map.yaml">
+              </label>
+              <div class="wall-actions">
+                <button type="button" id="browse-map">浏览地图</button>
+                <button type="button" id="load-map">加载地图</button>
+              </div>
+            </div>
+          </div>
+        </details>
+        <details class="wall-collapsible" id="wall-files-panel">
+          <summary>虚拟墙文件</summary>
+          <div class="wall-collapsible-body">
+            <div class="wall-panel wall-toolbar">
+              <label>
+                <span>虚拟墙 YAML</span>
+                <input id="wall-path" type="text" placeholder="/abs/path/to/virtual_walls.yaml">
+              </label>
+              <div class="wall-actions">
+                <button type="button" id="browse-wall">浏览墙文件</button>
+                <button type="button" id="load-wall">加载墙文件</button>
+                <button type="button" id="save-wall">保存墙文件</button>
+              </div>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <p id="status" class="hub-flow" data-error="false">准备就绪：加载地图后，在画布中单击加点，双击或 Enter 完成当前墙。</p>
+
+      <section class="wall-layout">
+        <article class="canvas-wrap">
+          <canvas id="wall-canvas"></canvas>
+        </article>
+        <aside class="wall-side">
+          <section class="wall-panel">
+            <h2>绘制控制</h2>
+            <label>
+              <span>默认墙厚度</span>
+              <input id="thickness" type="number" min="0.01" step="0.01" value="0.1">
+            </label>
+            <div class="wall-actions" role="group" aria-label="编辑模式">
+              <button type="button" id="select-mode" class="mode-button" data-active="true">选择模式</button>
+              <button type="button" id="draw-mode" class="mode-button" data-active="false">绘制模式</button>
+            </div>
+            <div class="wall-actions">
+              <button type="button" id="finish-wall">完成当前墙</button>
+              <button type="button" id="undo-point">撤销点</button>
+              <button type="button" id="undo-wall">撤销墙</button>
+              <button type="button" id="delete-point">删除选中点</button>
+              <button type="button" id="delete-selected">删除选中墙</button>
+              <button type="button" id="clear-all">清空</button>
+            </div>
+            <p class="wall-muted">选择模式：点击选择墙/点，Ctrl/Shift 点击墙线或墙列表可多选墙，拖动已选墙线可整体移动多堵墙；拖动点仍只移动单点，不会新增点，Delete 删除选中点或墙。绘制模式：空白处加点，线段上插点。快捷键：Enter 完成，Backspace 撤销当前点，Escape 取消当前墙。</p>
+          </section>
+
+          <section class="wall-panel">
+            <h2>地图信息</h2>
+            <p id="map-info" class="wall-muted">未加载地图</p>
+          </section>
+
+          <section class="wall-panel">
+            <h2>墙列表</h2>
+            <div id="wall-list" class="wall-list"></div>
+          </section>
+
+          <section class="wall-panel">
+            <h2>输出说明</h2>
+            <textarea id="yaml-note" rows="8" readonly>保存后输出字段：
+virtual_walls.coordinate_mode: image_relative
+virtual_walls.map_origin: 地图 YAML origin
+virtual_walls.segments: 每段墙相对地图 origin 的 start/end</textarea>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module">
+      import {
+        consumeCanvasClickSuppression,
+        deleteWallPoint,
+        findNearestWallPoint,
+        findNearestWallSegment,
+        finishPointDrag,
+        finishWallDrag,
+        moveWallPolylines,
+        moveWallPolyline,
+        moveWallPoint,
+        resolveWallCanvasClick,
+        toggleWallSelection,
+      } from "/hub-static/virtual-wall-editor-state.js";
+
+      const state = {
+        map: null,
+        image: null,
+        view: { scale: 1, offsetX: 0, offsetY: 0 },
+        polylines: [],
+        draft: [],
+        mode: "select",
+        selectedIndex: -1,
+        selectedIndexes: [],
+        selectedPointIndex: -1,
+        draggingPoint: null,
+        draggingWall: null,
+        dragMoved: false,
+        wallDragMoved: false,
+        suppressNextClick: false,
+        pickerTarget: "map",
+        pickerCwd: "/",
+        isPanning: false,
+        lastPan: null,
+      };
+
+      const el = {
+        mapPath: document.querySelector("#map-path"),
+        wallPath: document.querySelector("#wall-path"),
+        thickness: document.querySelector("#thickness"),
+        canvas: document.querySelector("#wall-canvas"),
+        canvasWrap: document.querySelector(".canvas-wrap"),
+        selectMode: document.querySelector("#select-mode"),
+        drawMode: document.querySelector("#draw-mode"),
+        status: document.querySelector("#status"),
+        mapInfo: document.querySelector("#map-info"),
+        wallList: document.querySelector("#wall-list"),
+        pickerOverlay: document.querySelector("#picker-overlay"),
+        pickerTitle: document.querySelector("#picker-title"),
+        pickerCwd: document.querySelector("#picker-cwd"),
+        pickerList: document.querySelector("#picker-list"),
+        deletePoint: document.querySelector("#delete-point"),
+      };
+      const ctx = el.canvas.getContext("2d");
+
+      function setStatus(message, isError = false) {
+        el.status.textContent = message;
+        el.status.dataset.error = String(isError);
+        el.status.style.borderColor = isError ? "#b95555" : "#22303c";
+      }
+
+      async function runButtonFeedback(button, labels, operation) {
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = labels.pending;
+        try {
+          const result = await operation();
+          button.textContent = labels.success;
+          window.setTimeout(() => {
+            button.textContent = originalText;
+            button.disabled = false;
+          }, 1400);
+          return result;
+        } catch (error) {
+          button.textContent = labels.failure;
+          window.setTimeout(() => {
+            button.textContent = originalText;
+            button.disabled = false;
+          }, 1800);
+          throw error;
+        }
+      }
+
+      function setMode(mode) {
+        state.mode = mode;
+        el.selectMode.dataset.active = String(mode === "select");
+        el.drawMode.dataset.active = String(mode === "draw");
+        el.canvas.style.cursor = mode === "draw" ? "crosshair" : "default";
+        if (mode === "select") {
+          clearDraft();
+          setStatus("选择模式：点击墙或点进行选择，Ctrl/Shift 点击墙线可多选，拖动已选墙线可整体移动多堵墙。");
+        } else {
+          setStatus("绘制模式：点击空白处加点，点击已有线段插点，Enter 或双击完成当前墙。");
+        }
+      }
+
+      function worldToCanvas(point) {
+        const [originX, originY] = state.map.origin;
+        const pixelX = (point.x - originX) / state.map.resolution;
+        const pixelY = state.map.height - (point.y - originY) / state.map.resolution;
+        return {
+          x: state.view.offsetX + pixelX * state.view.scale,
+          y: state.view.offsetY + pixelY * state.view.scale,
+        };
+      }
+
+      function canvasToWorld(point) {
+        const pixelX = (point.x - state.view.offsetX) / state.view.scale;
+        const pixelY = (point.y - state.view.offsetY) / state.view.scale;
+        return {
+          x: state.map.origin[0] + pixelX * state.map.resolution,
+          y: state.map.origin[1] + (state.map.height - pixelY) * state.map.resolution,
+          z: 0,
+        };
+      }
+
+      function resizeCanvasIfNeeded() {
+        const rect = el.canvas.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        const nextWidth = Math.max(1, Math.floor(rect.width * ratio));
+        const nextHeight = Math.max(1, Math.floor(rect.height * ratio));
+        if (el.canvas.width === nextWidth && el.canvas.height === nextHeight) {
+          return false;
+        }
+        el.canvas.width = nextWidth;
+        el.canvas.height = nextHeight;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        return true;
+      }
+
+      function resizeCanvas() {
+        if (resizeCanvasIfNeeded()) {
+          draw();
+        }
+      }
+
+      function fitMap() {
+        if (!state.map) return;
+        const rect = el.canvas.getBoundingClientRect();
+        const scale = Math.min(rect.width / state.map.width, rect.height / state.map.height) * 0.92;
+        state.view.scale = scale;
+        state.view.offsetX = (rect.width - state.map.width * scale) / 2;
+        state.view.offsetY = (rect.height - state.map.height * scale) / 2;
+      }
+
+      function drawGrid() {
+        if (!state.map) return;
+        const pixelsPerMeter = state.view.scale / state.map.resolution;
+        const candidates = [0.5, 1, 2, 5, 10, 20];
+        const spacing = candidates.find((value) => value * pixelsPerMeter >= 34) || 20;
+        const rect = el.canvas.getBoundingClientRect();
+        const topLeft = canvasToWorld({ x: 0, y: 0 });
+        const bottomRight = canvasToWorld({ x: rect.width, y: rect.height });
+        const minX = Math.floor(Math.min(topLeft.x, bottomRight.x) / spacing) * spacing;
+        const maxX = Math.ceil(Math.max(topLeft.x, bottomRight.x) / spacing) * spacing;
+        const minY = Math.floor(Math.min(topLeft.y, bottomRight.y) / spacing) * spacing;
+        const maxY = Math.ceil(Math.max(topLeft.y, bottomRight.y) / spacing) * spacing;
+
+        ctx.save();
+        ctx.strokeStyle = "rgba(142, 205, 242, 0.16)";
+        ctx.lineWidth = 1;
+        for (let x = minX; x <= maxX; x += spacing) {
+          const a = worldToCanvas({ x, y: minY });
+          const b = worldToCanvas({ x, y: maxY });
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+        for (let y = minY; y <= maxY; y += spacing) {
+          const a = worldToCanvas({ x: minX, y });
+          const b = worldToCanvas({ x: maxX, y });
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawMapOrigin() {
+        const origin = worldToCanvas({ x: state.map.origin[0], y: state.map.origin[1], z: 0 });
+        ctx.save();
+        ctx.strokeStyle = "#f2c94c";
+        ctx.fillStyle = "#f2c94c";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(origin.x - 12, origin.y);
+        ctx.lineTo(origin.x + 12, origin.y);
+        ctx.moveTo(origin.x, origin.y - 12);
+        ctx.lineTo(origin.x, origin.y + 12);
+        ctx.stroke();
+        ctx.fillText("map origin", origin.x + 8, origin.y - 8);
+        ctx.restore();
+      }
+
+      function drawPolyline(polyline, index, isDraft = false) {
+        const points = polyline.points || polyline;
+        if (!points.length) return;
+        const selectedWall = state.selectedIndexes.includes(index);
+        ctx.save();
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.lineWidth = selectedWall ? 5 : 3;
+        ctx.strokeStyle = isDraft ? "rgba(242, 201, 76, 0.86)" : selectedWall ? "#4db0e8" : "#f05b5b";
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.beginPath();
+        points.forEach((point, pointIndex) => {
+          const canvasPoint = worldToCanvas(point);
+          if (pointIndex === 0) ctx.moveTo(canvasPoint.x, canvasPoint.y);
+          else ctx.lineTo(canvasPoint.x, canvasPoint.y);
+        });
+        ctx.stroke();
+        points.forEach((point, pointIndex) => {
+          const canvasPoint = worldToCanvas(point);
+          ctx.beginPath();
+          const isSelectedPoint = selectedWall && pointIndex === state.selectedPointIndex;
+          ctx.arc(canvasPoint.x, canvasPoint.y, isSelectedPoint ? 6 : 4, 0, Math.PI * 2);
+          ctx.fill();
+          if (isSelectedPoint) {
+            ctx.strokeStyle = "#f2c94c";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+        });
+        ctx.restore();
+      }
+
+      function draw() {
+        const rect = el.canvas.getBoundingClientRect();
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        if (!state.map || !state.image) {
+          ctx.fillStyle = "#8ca4b8";
+          ctx.fillText("请先加载地图 YAML", 24, 32);
+          return;
+        }
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          state.image,
+          state.view.offsetX,
+          state.view.offsetY,
+          state.map.width * state.view.scale,
+          state.map.height * state.view.scale,
+        );
+        ctx.restore();
+        drawGrid();
+        drawMapOrigin();
+        state.polylines.forEach((polyline, index) => drawPolyline(polyline, index));
+        drawPolyline(state.draft, -1, true);
+      }
+
+      function renderWallList() {
+        el.wallList.innerHTML = "";
+        if (!state.polylines.length) {
+          el.wallList.innerHTML = '<p class="wall-muted">暂无虚拟墙</p>';
+          return;
+        }
+        state.polylines.forEach((polyline, index) => {
+          const item = document.createElement("div");
+          item.className = "wall-item";
+          item.dataset.selected = String(state.selectedIndexes.includes(index));
+          item.innerHTML = `<strong>墙 ${index + 1}</strong><div class="wall-muted">${polyline.points.length} 点，厚度 ${polyline.thickness}</div>`;
+          item.addEventListener("click", (event) => {
+            if (event.ctrlKey || event.metaKey || event.shiftKey) {
+              state.selectedIndexes = toggleWallSelection(state.selectedIndexes, index);
+              state.selectedIndex = state.selectedIndexes.at(-1) ?? -1;
+            } else {
+              state.selectedIndex = index;
+              state.selectedIndexes = [index];
+            }
+            state.selectedPointIndex = -1;
+            renderWallList();
+            draw();
+          });
+          el.wallList.appendChild(item);
+        });
+      }
+
+      function finishWall() {
+        if (state.draft.length < 2) return;
+        state.polylines.push({
+          points: state.draft.map((point) => ({ ...point })),
+          thickness: Number(el.thickness.value || 0.1),
+        });
+        state.draft = [];
+        state.selectedIndex = state.polylines.length - 1;
+        state.selectedIndexes = [state.selectedIndex];
+        state.selectedPointIndex = -1;
+        renderWallList();
+        draw();
+      }
+
+      function clearDraft() {
+        state.draft = [];
+        draw();
+      }
+
+      function deleteSelectedPoint() {
+        if (state.selectedIndex < 0 || state.selectedPointIndex < 0) {
+          return false;
+        }
+        const result = deleteWallPoint(state.polylines, {
+          polylineIndex: state.selectedIndex,
+          pointIndex: state.selectedPointIndex,
+        });
+        state.polylines = result.polylines;
+        state.selectedIndex = result.selectedIndex;
+        state.selectedIndexes = result.selectedIndex >= 0 ? [result.selectedIndex] : [];
+        state.selectedPointIndex = result.selectedPointIndex;
+        renderWallList();
+        draw();
+        return true;
+      }
+
+      function deleteSelectedWall() {
+        if (state.selectedIndex < 0) {
+          return false;
+        }
+        state.polylines.splice(state.selectedIndex, 1);
+        state.selectedIndex = -1;
+        state.selectedIndexes = [];
+        state.selectedPointIndex = -1;
+        renderWallList();
+        draw();
+        return true;
+      }
+
+      function findPolylineAt(canvasPoint) {
+        const clickResult = resolveWallCanvasClick({
+          mode: "select",
+          draft: [],
+          polylines: state.polylines,
+          canvasPoint,
+          worldToCanvas,
+          canvasToWorld,
+        });
+        return clickResult.selectedIndex ?? -1;
+      }
+
+      function canvasPointFromEvent(event) {
+        const rect = el.canvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      }
+
+      async function postJson(url, payload) {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `请求失败：${response.status}`);
+        return data;
+      }
+
+      async function loadMap() {
+        try {
+          const data = await postJson("/virtual-wall-builder/api/load_map", { yaml_path: el.mapPath.value.trim() });
+          const image = new Image();
+          image.onload = () => {
+            state.image = image;
+            state.map = {
+              resolution: Number(data.resolution),
+              origin: data.origin,
+              width: data.width,
+              height: data.height,
+            };
+            fitMap();
+            el.mapInfo.textContent = `origin=[${data.origin.join(", ")}], resolution=${data.resolution}, size=${data.width}x${data.height}`;
+            setStatus("地图已加载，当前为选择模式；切到绘制模式后可以新增虚拟墙。");
+            draw();
+          };
+          image.src = `data:image/png;base64,${data.image_b64}`;
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      }
+
+      async function loadWall() {
+        try {
+          const payload = { path: el.wallPath.value.trim() };
+          if (state.map) payload.current_map_origin = state.map.origin;
+          const data = await postJson("/virtual-wall-builder/api/load", payload);
+          state.polylines = data.document.polylines || [];
+          state.draft = [];
+          state.selectedIndex = state.polylines.length ? 0 : -1;
+          state.selectedIndexes = state.selectedIndex >= 0 ? [state.selectedIndex] : [];
+          state.selectedPointIndex = -1;
+          renderWallList();
+          draw();
+          setStatus(`已加载虚拟墙文件：${data.path}`);
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      }
+
+      async function saveWall() {
+        if (!state.map) {
+          setStatus("请先加载地图，保存需要地图 YAML origin。", true);
+          return;
+        }
+        try {
+          await runButtonFeedback(
+            document.querySelector("#save-wall"),
+            { pending: "保存中...", success: "已保存", failure: "保存失败" },
+            async () => {
+              setStatus("正在保存虚拟墙文件...");
+              const data = await postJson("/virtual-wall-builder/api/save", {
+                path: el.wallPath.value.trim(),
+                map_origin: state.map.origin,
+                thickness: Number(el.thickness.value || 0.1),
+                frame_id: "map",
+                polylines: state.polylines,
+              });
+              setStatus(`保存成功：${data.path}`);
+            },
+          );
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      }
+
+      async function openPicker(target) {
+        state.pickerTarget = target;
+        const current = target === "map" ? el.mapPath.value.trim() : el.wallPath.value.trim();
+        state.pickerCwd = current || state.pickerCwd || "/";
+        el.pickerTitle.textContent = target === "map" ? "选择地图 YAML" : "选择虚拟墙 YAML";
+        el.pickerOverlay.classList.add("visible");
+        await refreshPicker(state.pickerCwd);
+      }
+
+      async function refreshPicker(path) {
+        try {
+          const data = await postJson("/virtual-wall-builder/api/browse", { path });
+          state.pickerCwd = data.cwd;
+          el.pickerCwd.textContent = data.cwd;
+          el.pickerList.innerHTML = "";
+          data.entries.forEach((entry) => {
+            const item = document.createElement("div");
+            item.className = "picker-entry";
+            item.dataset.clickable = String(entry.is_dir || entry.is_yaml);
+            item.textContent = `${entry.is_dir ? "[目录]" : "[文件]"} ${entry.name}`;
+            item.addEventListener("click", () => {
+              if (entry.is_dir) refreshPicker(entry.path);
+              else if (entry.is_yaml) {
+                if (state.pickerTarget === "map") el.mapPath.value = entry.path;
+                else el.wallPath.value = entry.path;
+                el.pickerOverlay.classList.remove("visible");
+              }
+            });
+            el.pickerList.appendChild(item);
+          });
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      }
+
+      el.canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+      el.canvas.addEventListener("mousedown", (event) => {
+        if (event.button === 2) {
+          state.isPanning = true;
+          state.lastPan = { x: event.clientX, y: event.clientY };
+          return;
+        }
+        if (!state.map || event.button !== 0) {
+          return;
+        }
+        const pointHit = findNearestWallPoint(state.polylines, canvasPointFromEvent(event), worldToCanvas, 12);
+        if (pointHit) {
+          state.draggingPoint = pointHit;
+          state.dragMoved = false;
+          state.selectedIndex = pointHit.polylineIndex;
+          state.selectedIndexes = [pointHit.polylineIndex];
+          state.selectedPointIndex = pointHit.pointIndex;
+          el.canvas.style.cursor = "grabbing";
+          renderWallList();
+          draw();
+          return;
+        }
+        if (state.mode === "select") {
+          const segmentHit = findNearestWallSegment(state.polylines, canvasPointFromEvent(event), worldToCanvas, 10);
+          if (segmentHit) {
+            if (event.ctrlKey || event.metaKey || event.shiftKey) {
+              state.selectedIndexes = toggleWallSelection(state.selectedIndexes, segmentHit.polylineIndex);
+              state.selectedIndex = state.selectedIndexes.at(-1) ?? -1;
+              state.selectedPointIndex = -1;
+              renderWallList();
+              draw();
+              return;
+            }
+            const selectedIndexes = state.selectedIndexes.includes(segmentHit.polylineIndex)
+              ? state.selectedIndexes
+              : [segmentHit.polylineIndex];
+            state.draggingWall = {
+              polylineIndex: segmentHit.polylineIndex,
+              polylineIndexes: selectedIndexes,
+              lastWorldPoint: canvasToWorld(canvasPointFromEvent(event)),
+            };
+            state.wallDragMoved = false;
+            state.selectedIndex = segmentHit.polylineIndex;
+            state.selectedIndexes = selectedIndexes;
+            state.selectedPointIndex = -1;
+            el.canvas.style.cursor = "grabbing";
+            renderWallList();
+            draw();
+          }
+        }
+      });
+      window.addEventListener("mouseup", () => {
+        state.isPanning = false;
+        finishPointDrag(state);
+        finishWallDrag(state);
+        el.canvas.style.cursor = state.mode === "draw" ? "crosshair" : "default";
+      });
+      window.addEventListener("mousemove", (event) => {
+        if (state.draggingPoint && state.map) {
+          state.dragMoved = true;
+          state.polylines = moveWallPoint(
+            state.polylines,
+            state.draggingPoint,
+            canvasToWorld(canvasPointFromEvent(event)),
+          );
+          draw();
+          return;
+        }
+        if (state.draggingWall && state.map) {
+          const currentWorldPoint = canvasToWorld(canvasPointFromEvent(event));
+          const delta = {
+            x: currentWorldPoint.x - state.draggingWall.lastWorldPoint.x,
+            y: currentWorldPoint.y - state.draggingWall.lastWorldPoint.y,
+            z: (currentWorldPoint.z ?? 0) - (state.draggingWall.lastWorldPoint.z ?? 0),
+          };
+          state.wallDragMoved = true;
+          state.polylines = state.draggingWall.polylineIndexes?.length > 1
+            ? moveWallPolylines(state.polylines, state.draggingWall.polylineIndexes, delta)
+            : moveWallPolyline(state.polylines, state.draggingWall.polylineIndex, delta);
+          state.draggingWall = {
+            ...state.draggingWall,
+            lastWorldPoint: currentWorldPoint,
+          };
+          draw();
+          return;
+        }
+        if (!state.isPanning || !state.lastPan) return;
+        state.view.offsetX += event.clientX - state.lastPan.x;
+        state.view.offsetY += event.clientY - state.lastPan.y;
+        state.lastPan = { x: event.clientX, y: event.clientY };
+        draw();
+      });
+      el.canvas.addEventListener("click", (event) => {
+        if (!state.map || event.button !== 0) return;
+        if (consumeCanvasClickSuppression(state)) return;
+        if (state.draggingPoint) return;
+        const canvasPoint = canvasPointFromEvent(event);
+        const clickResult = resolveWallCanvasClick({
+          mode: state.mode,
+          draft: state.draft,
+          polylines: state.polylines,
+          canvasPoint,
+          worldToCanvas,
+          canvasToWorld,
+        });
+        state.polylines = clickResult.polylines;
+        state.draft = clickResult.draft;
+        state.selectedIndex = clickResult.selectedIndex ?? state.selectedIndex;
+        state.selectedIndexes = state.selectedIndex >= 0 ? [state.selectedIndex] : [];
+        state.selectedPointIndex = clickResult.selectedPointIndex ?? -1;
+        if (clickResult.action === "none") {
+          state.selectedIndex = -1;
+          state.selectedIndexes = [];
+          state.selectedPointIndex = -1;
+        }
+        renderWallList();
+        draw();
+      });
+      el.canvas.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        finishWall();
+      });
+      el.canvas.addEventListener("wheel", (event) => {
+        if (!state.map) return;
+        event.preventDefault();
+        const point = canvasPointFromEvent(event);
+        const before = canvasToWorld(point);
+        const factor = event.deltaY < 0 ? 1.12 : 0.88;
+        state.view.scale = Math.max(0.05, Math.min(50, state.view.scale * factor));
+        const afterCanvas = worldToCanvas(before);
+        state.view.offsetX += point.x - afterCanvas.x;
+        state.view.offsetY += point.y - afterCanvas.y;
+        draw();
+      }, { passive: false });
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") finishWall();
+        if (event.key === "Escape") clearDraft();
+        if (event.key === "Delete" && state.mode === "select" && state.selectedIndex >= 0) {
+          event.preventDefault();
+          if (!deleteSelectedPoint()) {
+            deleteSelectedWall();
+          }
+        }
+        if (event.key === "Backspace" && state.draft.length) {
+          event.preventDefault();
+          state.draft.pop();
+          draw();
+        }
+      });
+
+      document.querySelector("#browse-map").addEventListener("click", () => openPicker("map"));
+      document.querySelector("#browse-wall").addEventListener("click", () => openPicker("wall"));
+      document.querySelector("#load-map").addEventListener("click", loadMap);
+      document.querySelector("#load-wall").addEventListener("click", loadWall);
+      document.querySelector("#save-wall").addEventListener("click", saveWall);
+      el.selectMode.addEventListener("click", () => setMode("select"));
+      el.drawMode.addEventListener("click", () => setMode("draw"));
+      document.querySelector("#finish-wall").addEventListener("click", finishWall);
+      document.querySelector("#undo-point").addEventListener("click", () => {
+        state.draft.pop();
+        draw();
+      });
+      document.querySelector("#undo-wall").addEventListener("click", () => {
+        state.polylines.pop();
+        state.selectedIndex = Math.min(state.selectedIndex, state.polylines.length - 1);
+        state.selectedIndexes = state.selectedIndex >= 0 ? [state.selectedIndex] : [];
+        state.selectedPointIndex = -1;
+        renderWallList();
+        draw();
+      });
+      el.deletePoint.addEventListener("click", deleteSelectedPoint);
+      document.querySelector("#delete-selected").addEventListener("click", deleteSelectedWall);
+      document.querySelector("#clear-all").addEventListener("click", () => {
+        state.polylines = [];
+        state.draft = [];
+        state.selectedIndex = -1;
+        state.selectedIndexes = [];
+        state.selectedPointIndex = -1;
+        state.draggingPoint = null;
+        state.draggingWall = null;
+        state.dragMoved = false;
+        state.wallDragMoved = false;
+        state.suppressNextClick = false;
+        renderWallList();
+        draw();
+      });
+      document.querySelector("#picker-close").addEventListener("click", () => {
+        el.pickerOverlay.classList.remove("visible");
+      });
+      document.querySelector("#picker-up").addEventListener("click", () => {
+        refreshPicker(`${state.pickerCwd}/..`);
+      });
+
+      const canvasObserver = new ResizeObserver(() => {
+        resizeCanvas();
+      });
+
+      canvasObserver.observe(el.canvasWrap);
+      window.addEventListener("resize", resizeCanvas);
+      renderWallList();
+      resizeCanvas();
+      setMode("select");
+    </script>
+  </body>
+</html>

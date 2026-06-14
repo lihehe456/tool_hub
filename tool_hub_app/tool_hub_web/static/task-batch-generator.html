@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Batch Generator</title>
+    <link rel="stylesheet" href="/hub-static/hub.css">
+    <style>
+      .batch-shell {
+        display: grid;
+        gap: 1rem;
+      }
+      .batch-panel {
+        border: 1px solid #22303c;
+        border-radius: 16px;
+        background: rgba(15, 21, 29, 0.94);
+        padding: 1rem;
+      }
+      .batch-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: end;
+      }
+      .batch-toolbar label {
+        flex: 1 1 220px;
+        display: grid;
+        gap: 0.35rem;
+      }
+      .batch-toolbar input {
+        width: 100%;
+        padding: 0.6rem 0.7rem;
+        border-radius: 10px;
+        border: 1px solid #314456;
+        background: #121b24;
+        color: #d6deeb;
+        font: inherit;
+      }
+      .batch-layout {
+        display: grid;
+        grid-template-columns: minmax(320px, 0.9fr) minmax(460px, 1.3fr);
+        gap: 1rem;
+      }
+      .batch-list,
+      .batch-preview-list {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .batch-pair-card,
+      .batch-preview-card {
+        border: 1px solid #22303c;
+        border-radius: 14px;
+        background: #121b24;
+        padding: 0.85rem;
+        display: grid;
+        gap: 0.45rem;
+      }
+      .batch-pair-card[data-selected="true"] {
+        border-color: #4db0e8;
+        box-shadow: 0 0 0 1px rgba(77, 176, 232, 0.22);
+      }
+      .batch-pair-meta,
+      .batch-preview-meta,
+      .batch-rewrite {
+        color: #8ca4b8;
+        font-size: 0.84rem;
+        word-break: break-all;
+      }
+      .batch-inline {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .batch-inline label {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        color: #8ca4b8;
+        font-size: 0.84rem;
+      }
+      .picker-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 8, 12, 0.72);
+        align-items: center;
+        justify-content: center;
+      }
+      .picker-overlay.visible {
+        display: flex;
+      }
+      .picker-box {
+        width: min(760px, 92vw);
+        max-height: 72vh;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        border: 1px solid #22303c;
+        border-radius: 14px;
+        background: #0f151d;
+        overflow: hidden;
+      }
+      .picker-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.9rem 1rem;
+        border-bottom: 1px solid #22303c;
+      }
+      .picker-header span {
+        flex: 1;
+        color: #8ca4b8;
+        font-size: 0.82rem;
+        word-break: break-all;
+      }
+      .picker-list {
+        overflow: auto;
+        padding: 0.85rem;
+        display: grid;
+        gap: 0.45rem;
+      }
+      .picker-entry {
+        padding: 0.65rem 0.8rem;
+        border-radius: 10px;
+        border: 1px solid #22303c;
+        background: #121b24;
+      }
+      .picker-entry.dir {
+        cursor: pointer;
+      }
+      .picker-entry.dir:hover {
+        border-color: #4db0e8;
+      }
+      @media (max-width: 1180px) {
+        .batch-layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="picker-overlay" class="picker-overlay">
+      <div class="picker-box">
+        <div class="picker-header">
+          <strong>选择目录</strong>
+          <span id="picker-cwd"></span>
+          <button type="button" id="picker-select-dir">选择当前目录</button>
+          <button type="button" id="picker-close">关闭</button>
+        </div>
+        <div id="picker-list" class="picker-list"></div>
+      </div>
+    </div>
+
+    <main class="hub-page batch-shell">
+      <header class="hub-hero">
+        <p class="hub-kicker">Task Samples</p>
+        <h1>Task Batch Generator</h1>
+        <p class="hub-subtitle">从目录中识别 `01 / 03` 任务样本对，按真实任务内部关联批量生成不同楼层任务文件。</p>
+        <p><a class="tool-link" href="/">返回导航页</a></p>
+      </header>
+
+      <section class="batch-panel batch-toolbar">
+        <label>
+          <span>样本目录</span>
+          <input id="template-directory" type="text" placeholder="/abs/path/to/origin_tasks">
+        </label>
+        <label>
+          <span>输出目录</span>
+          <input id="output-directory" type="text" placeholder="/abs/path/to/output">
+        </label>
+        <button type="button" id="browse-directory-button">浏览目录</button>
+        <button type="button" id="scan-button">扫描样本对</button>
+      </section>
+
+      <section class="batch-panel batch-toolbar">
+        <label>
+          <span>起始楼层</span>
+          <input id="start-floor" type="number" step="1" value="1">
+        </label>
+        <label>
+          <span>结束楼层</span>
+          <input id="end-floor" type="number" step="1" value="1">
+        </label>
+        <label>
+          <span>源楼层</span>
+          <input id="elevator-floor" type="number" step="1" placeholder="留空则自动识别">
+        </label>
+        <div class="batch-inline">
+          <label><input id="overwrite-toggle" type="checkbox"> overwrite</label>
+          <button type="button" id="preview-button">预览生成</button>
+          <button type="button" id="generate-button">开始生成</button>
+        </div>
+      </section>
+
+      <p id="batch-status" class="hub-flow" data-error="false">准备就绪</p>
+
+      <section class="batch-layout">
+        <article class="batch-panel">
+          <h2>样本对列表</h2>
+          <div id="pair-list" class="batch-list">
+            <p class="panel-empty">请先扫描样本目录</p>
+          </div>
+        </article>
+        <article class="batch-panel">
+          <h2>生成预览</h2>
+          <div id="preview-list" class="batch-preview-list">
+            <p class="panel-empty">请选择样本对并点击“预览生成”</p>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        defaultRoot: "/",
+        browseCwd: "/",
+        pairs: [],
+        selectedPairIndex: -1,
+        preview: null,
+      };
+
+      const elements = {
+        templateDirectory: document.querySelector("#template-directory"),
+        outputDirectory: document.querySelector("#output-directory"),
+        startFloor: document.querySelector("#start-floor"),
+        endFloor: document.querySelector("#end-floor"),
+        elevatorFloor: document.querySelector("#elevator-floor"),
+        overwriteToggle: document.querySelector("#overwrite-toggle"),
+        scanButton: document.querySelector("#scan-button"),
+        previewButton: document.querySelector("#preview-button"),
+        generateButton: document.querySelector("#generate-button"),
+        browseDirectoryButton: document.querySelector("#browse-directory-button"),
+        status: document.querySelector("#batch-status"),
+        pairList: document.querySelector("#pair-list"),
+        previewList: document.querySelector("#preview-list"),
+        pickerOverlay: document.querySelector("#picker-overlay"),
+        pickerCwd: document.querySelector("#picker-cwd"),
+        pickerList: document.querySelector("#picker-list"),
+        pickerSelectDir: document.querySelector("#picker-select-dir"),
+        pickerClose: document.querySelector("#picker-close"),
+      };
+
+      function setStatus(message, error = false) {
+        elements.status.textContent = message;
+        elements.status.dataset.error = error ? "true" : "false";
+      }
+
+      async function runButtonFeedback(button, labels, operation) {
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = labels.pending;
+        try {
+          const result = await operation();
+          button.textContent = labels.success;
+          window.setTimeout(() => {
+            button.textContent = originalText;
+            button.disabled = false;
+          }, 1400);
+          return result;
+        } catch (error) {
+          button.textContent = labels.failure;
+          window.setTimeout(() => {
+            button.textContent = originalText;
+            button.disabled = false;
+          }, 1800);
+          throw error;
+        }
+      }
+
+      async function requestJson(url, options = {}) {
+        const response = await fetch(url, options);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || `Request failed: ${response.status}`);
+        }
+        return payload;
+      }
+
+      function currentPair() {
+        return state.selectedPairIndex >= 0 ? state.pairs[state.selectedPairIndex] : null;
+      }
+
+      function renderPairs() {
+        if (!state.pairs.length) {
+          elements.pairList.innerHTML = '<p class="panel-empty">未识别到可用样本对</p>';
+          return;
+        }
+        elements.pairList.innerHTML = state.pairs.map((pair, index) => `
+          <button type="button" class="batch-pair-card" data-pair-index="${index}" data-selected="${index === state.selectedPairIndex ? "true" : "false"}">
+            <strong>${pair.prefix}_${pair.template_floor}</strong>
+            <div class="batch-pair-meta">样本目录: ${pair.directory}</div>
+            <div class="batch-pair-meta">源楼层: ${pair.source_floor}</div>
+            <div class="batch-pair-meta">01: ${pair.template_01_path}</div>
+            <div class="batch-pair-meta">03: ${pair.template_03_path}</div>
+          </button>
+        `).join("");
+      }
+
+      function renderPreview() {
+        if (!state.preview) {
+          elements.previewList.innerHTML = '<p class="panel-empty">请选择样本对并点击“预览生成”</p>';
+          return;
+        }
+        elements.previewList.innerHTML = state.preview.generated_files.map((file) => `
+          <article class="batch-preview-card">
+            <strong>${file.output_name}</strong>
+            <div class="batch-preview-meta">${file.output_path}</div>
+            ${
+              file.rewrites.length
+                ? file.rewrites.map((rewrite) => `
+                  <div class="batch-rewrite">${rewrite.waypoint_id || "-"}: ${rewrite.before} -> ${rewrite.after}</div>
+                `).join("")
+                : '<div class="batch-rewrite">无 waypoint_task_id 改写</div>'
+            }
+          </article>
+        `).join("");
+      }
+
+      function openPicker() {
+        elements.pickerOverlay.classList.add("visible");
+        browseTo(elements.templateDirectory.value.trim() || state.defaultRoot).catch((error) => {
+          setStatus(error.message, true);
+          closePicker();
+        });
+      }
+
+      function closePicker() {
+        elements.pickerOverlay.classList.remove("visible");
+      }
+
+      async function browseTo(path) {
+        const payload = await requestJson("/task-batch-generator/api/browse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path }),
+        });
+        state.browseCwd = payload.cwd;
+        elements.pickerCwd.textContent = payload.cwd;
+        elements.pickerList.innerHTML = "";
+
+        const up = document.createElement("div");
+        up.className = "picker-entry dir";
+        up.textContent = "..";
+        up.onclick = () => browseTo(payload.parent);
+        elements.pickerList.appendChild(up);
+
+        for (const entry of payload.entries) {
+          const item = document.createElement("div");
+          item.className = "picker-entry" + (entry.is_dir ? " dir" : "");
+          item.textContent = entry.name;
+          if (entry.is_dir) {
+            item.onclick = () => browseTo(entry.path);
+          }
+          elements.pickerList.appendChild(item);
+        }
+      }
+
+      async function loadRuntimeConfig() {
+        const payload = await requestJson("/task-batch-generator/api/runtime_config");
+        state.defaultRoot = payload.default_root || "/";
+        elements.templateDirectory.value = state.defaultRoot;
+        elements.outputDirectory.value = state.defaultRoot;
+      }
+
+      async function scanPairs() {
+        try {
+          const payload = await requestJson("/task-batch-generator/api/scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ directory: elements.templateDirectory.value.trim() }),
+          });
+          state.pairs = payload.pairs || [];
+          state.selectedPairIndex = state.pairs.length ? 0 : -1;
+          state.preview = null;
+          if (state.pairs.length) {
+            elements.outputDirectory.value = state.pairs[0].directory;
+            elements.elevatorFloor.value = state.pairs[0].source_floor ?? "";
+          }
+          renderPairs();
+          renderPreview();
+          setStatus(`已识别样本对: ${state.pairs.length}`, false);
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      }
+
+      async function previewSelectedPair() {
+        const pair = currentPair();
+        if (!pair) {
+          setStatus("请先选择一组样本对", true);
+          return;
+        }
+        try {
+          const payload = await requestJson("/task-batch-generator/api/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              template_01: pair.template_01_path,
+              template_03: pair.template_03_path,
+              start: Number(elements.startFloor.value),
+              end: Number(elements.endFloor.value),
+              output_dir: elements.outputDirectory.value.trim() || pair.directory,
+              elevator_floor: elements.elevatorFloor.value.trim(),
+            }),
+          });
+          state.preview = payload;
+          renderPreview();
+          setStatus(`预览完成: ${payload.generated_files.length} 个文件`, false);
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      }
+
+      async function generateSelectedPair() {
+        const pair = currentPair();
+        if (!pair) {
+          setStatus("请先选择一组样本对", true);
+          return;
+        }
+        try {
+          await runButtonFeedback(
+            elements.generateButton,
+            { pending: "生成中...", success: "已生成", failure: "生成失败" },
+            async () => {
+              setStatus("正在生成任务文件...", false);
+              const payload = await requestJson("/task-batch-generator/api/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  template_01: pair.template_01_path,
+                  template_03: pair.template_03_path,
+                  start: Number(elements.startFloor.value),
+                  end: Number(elements.endFloor.value),
+                  output_dir: elements.outputDirectory.value.trim() || pair.directory,
+                  elevator_floor: elements.elevatorFloor.value.trim(),
+                  overwrite: elements.overwriteToggle.checked,
+                }),
+              });
+              state.preview = payload;
+              renderPreview();
+              setStatus(`生成成功: ${payload.created_files.length} 个文件`, false);
+            },
+          );
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      }
+
+      elements.browseDirectoryButton.addEventListener("click", openPicker);
+      elements.pickerClose.addEventListener("click", closePicker);
+      elements.pickerSelectDir.addEventListener("click", () => {
+        elements.templateDirectory.value = state.browseCwd;
+        if (!elements.outputDirectory.value.trim() || elements.outputDirectory.value.trim() === state.defaultRoot) {
+          elements.outputDirectory.value = state.browseCwd;
+        }
+        closePicker();
+      });
+      elements.scanButton.addEventListener("click", scanPairs);
+      elements.previewButton.addEventListener("click", previewSelectedPair);
+      elements.generateButton.addEventListener("click", generateSelectedPair);
+      elements.pairList.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-pair-index]");
+        if (!button) return;
+        state.selectedPairIndex = Number(button.dataset.pairIndex);
+        const pair = currentPair();
+        if (pair) {
+          elements.outputDirectory.value = pair.directory;
+          elements.elevatorFloor.value = pair.source_floor ?? "";
+        }
+        state.preview = null;
+        renderPairs();
+        renderPreview();
+      });
+
+      loadRuntimeConfig()
+        .then(() => {
+          renderPairs();
+          renderPreview();
+          setStatus("准备就绪", false);
+        })
+        .catch((error) => setStatus(error.message, true));
+    </script>
+  </body>
+</html>

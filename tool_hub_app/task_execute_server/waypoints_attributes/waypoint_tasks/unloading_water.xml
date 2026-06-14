@@ -1,0 +1,12 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="NavigateWithUnloadingWater">
+      <!-- 旋转180°，避免返程时碰撞 -->
+      <Spin spin_dist="3.14"/>
+      <!-- 卸水 -->
+      <PlaceWater name="place_water"/>
+      <!-- 前进0.5米，离开卸水点 -->
+      <MoveForward dist="0.5" speed="0.2"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

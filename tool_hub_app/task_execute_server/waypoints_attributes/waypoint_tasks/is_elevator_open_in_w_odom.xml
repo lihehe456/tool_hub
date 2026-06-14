@@ -1,0 +1,15 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <!-- 使用默认参数 -->
+      <Wait wait_duration="10"/>
+      <SetTfBroadcast enable="true" />
+      <Wait wait_duration="5"/>
+      <SetUseWheelOdom use_wheel_odom="true"/>
+      <Wait wait_duration="5"/>
+      <ChangeUssStatus status="true"/>
+      <ElevatorStatus enable="true" 
+                     car_status="in"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

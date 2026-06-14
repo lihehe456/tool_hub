@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Group Mixer</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div id="picker-overlay" class="picker-overlay">
+      <div class="picker-box">
+        <div class="picker-header">
+          <strong id="picker-title">选择文件</strong>
+          <span id="picker-cwd"></span>
+          <button type="button" data-action="close-picker">关闭</button>
+        </div>
+        <div id="picker-list" class="picker-list"></div>
+      </div>
+    </div>
+
+    <main class="task-group-page">
+      <header class="task-group-header">
+        <h1>Task Group Mixer</h1>
+        <p id="workspace-meta">未加载混编工作区</p>
+        <a class="task-group-link" href="/task-groups">返回 Task Group Builder</a>
+      </header>
+
+      <section class="task-group-toolbar">
+        <label>
+          <span>混编工作区</span>
+          <input id="workspace-path" type="text" list="workspace-history-list" placeholder="/abs/path/to/mixer.json">
+          <datalist id="workspace-history-list"></datalist>
+        </label>
+        <button id="browse-workspace-button" type="button">浏览</button>
+        <button id="load-workspace-button" type="button">加载/创建</button>
+      </section>
+
+      <section class="task-group-toolbar">
+        <label>
+          <span>旁路来源</span>
+          <input id="source-path" type="text" list="source-history-list" placeholder="/abs/path/to/source.workspace.json">
+          <datalist id="source-history-list"></datalist>
+        </label>
+        <button id="browse-source-button" type="button">浏览</button>
+        <button id="import-source-button" type="button">导入/替换</button>
+      </section>
+
+      <p id="task-group-status" data-error="false">等待载入混编工作区</p>
+
+      <section class="task-group-toolbar">
+        <label>
+          <span>任务组名称</span>
+          <input id="task-group-name" type="text" placeholder="mix_result">
+        </label>
+        <label>
+          <span>导出目录</span>
+          <input id="output-task-path" type="text" placeholder="/abs/path/to/output-directory">
+        </label>
+        <button id="export-task-group-button" type="button">导出任务组</button>
+      </section>
+
+      <section class="task-group-columns task-group-columns-mixer">
+        <article class="task-group-panel">
+          <h2>来源列表</h2>
+          <div id="source-list"></div>
+        </article>
+        <article class="task-group-panel">
+          <h2>来源子任务池</h2>
+          <div id="available-subtasks"></div>
+        </article>
+        <article class="task-group-panel">
+          <h2>当前混编结果</h2>
+          <div id="selected-subtasks"></div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="/static/task-group-mixer-app.js"></script>
+  </body>
+</html>

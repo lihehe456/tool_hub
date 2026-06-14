@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+data/
+runtime/
+
+tool_hub_app/tool_hub_web/build/
+tool_hub_app/tool_hub_web/dist/
+
+.DS_Store
+Thumbs.db

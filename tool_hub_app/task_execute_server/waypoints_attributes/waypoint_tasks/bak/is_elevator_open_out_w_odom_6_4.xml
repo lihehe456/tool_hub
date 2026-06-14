@@ -1,0 +1,14 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <!-- 使用默认参数 -->
+      <VirtualElevatorJudge/>
+      <VirtualElevatorJudge topic_name="/is_elevator_open"/>
+      <SwitchMap map_url="/home/ry/workspace/robot_ws/src/lightning-lm/data/jiuwanli/f4/map.yaml"/>
+      <SetTfBroadcast enable="true" x="0.0" y="0.0" z="0.0" qx="-0.0" qy="0.0" qz="0.0" qw="1.0"/>
+      <SetUseWheelOdom use_wheel_odom="true"/>
+      <ElevatorStatus enable="true" 
+                     car_status="out"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

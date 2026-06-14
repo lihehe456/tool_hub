@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Task Editor</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: monospace; background: #1e1e1e; color: #ccc; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+a { color: #9cdcfe; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* toolbar */
+#toolbar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: #2d2d2d; border-bottom: 1px solid #444; flex-shrink: 0; }
+#task-path { flex: 1; padding: 4px 8px; background: #3a3a3a; border: 1px solid #555; color: #eee; border-radius: 3px; font-family: monospace; font-size: 12px; }
+.toolbar-meta { font-size: 11px; color: #9cdcfe; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar-link { margin-left: auto; font-size: 12px; white-space: nowrap; }
+.btn { padding: 4px 10px; border: none; color: #fff; border-radius: 3px; cursor: pointer; font-size: 12px; }
+.btn-blue { background: #0e639c; } .btn-blue:hover { background: #1177bb; }
+.btn-green { background: #2d7a2d; } .btn-green:hover { background: #3a9a3a; }
+.btn-gray { background: #555; } .btn-gray:hover { background: #666; }
+
+/* tabs */
+#subtask-tabs { display: flex; gap: 4px; padding: 4px 8px; background: #252525; border-bottom: 1px solid #444; flex-shrink: 0; flex-wrap: wrap; position: relative; z-index: 20; isolation: isolate; cursor: pointer; pointer-events: auto; }
+.tab-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; white-space: nowrap; padding: 3px 12px; background: #3a3a3a; border: 1px solid #555; border-radius: 3px; cursor: pointer; font-size: 12px; color: #aaa; position: relative; z-index: 2; pointer-events: auto; user-select: none; -webkit-user-select: none; }
+.tab-button:hover { background: #454545; border-color: #777; color: #fff; }
+.tab-button.active { background: #0e639c; color: #fff; border-color: #0e639c; }
+
+/* main */
+#main { display: flex; flex: 1; overflow: hidden; }
+#left-sidebar { width: 288px; min-width: 42px; flex: 0 0 288px; background: #202020; border-right: 1px solid #444; display: flex; flex-direction: column; overflow: hidden; transition: width 0.18s ease, flex-basis 0.18s ease; }
+#left-sidebar.collapsed { width: 42px; flex-basis: 42px; }
+#left-sidebar.collapsed #left-sidebar-body { display: none; }
+#left-sidebar.collapsed #left-sidebar-header span { display: none; }
+#left-sidebar-header { padding: 8px 10px; background: #2d2d2d; border-bottom: 1px solid #444; font-size: 12px; font-weight: bold; color: #eee; display: flex; align-items: center; gap: 6px; }
+#left-sidebar-header span { flex: 1; }
+#left-sidebar-body { padding: 10px; overflow-y: auto; display: grid; gap: 10px; }
+.side-block { display: grid; gap: 6px; padding: 8px; border: 1px solid #3f3f3f; border-radius: 4px; background: #252525; }
+.side-block-title { font-size: 11px; color: #9cdcfe; }
+.side-field { display: grid; gap: 4px; }
+.side-field label { font-size: 11px; color: #aaa; }
+.side-field input { width: 100%; padding: 4px 8px; background: #3a3a3a; border: 1px solid #555; color: #eee; border-radius: 3px; font-family: monospace; font-size: 12px; }
+.side-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.side-hint { font-size: 11px; color: #888; line-height: 1.4; }
+#canvas-wrap { flex: 1; position: relative; overflow: hidden; background: #111; }
+#map-canvas { position: absolute; top: 0; left: 0; }
+
+/* panel */
+#panel { width: 300px; background: #252525; border-left: 1px solid #444; display: flex; flex-direction: column; overflow: hidden; }
+#panel-header { padding: 6px 10px; background: #2d2d2d; border-bottom: 1px solid #444; font-size: 12px; font-weight: bold; color: #eee; display: flex; align-items: center; gap: 6px; }
+#panel-header span { flex: 1; }
+#subtask-meta { padding: 8px 10px; border-bottom: 1px solid #444; background: #242424; display: none; }
+.subtask-meta-title { font-size: 11px; color: #9cdcfe; margin-bottom: 6px; }
+.subtask-meta-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.subtask-meta-row label { font-size: 11px; color: #aaa; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+#waypoint-list { flex: 1; overflow-y: auto; padding: 3px; }
+.wp-item { padding: 4px 7px; margin: 1px 0; border-radius: 3px; cursor: pointer; border: 1px solid transparent; font-size: 11px; display: flex; align-items: center; gap: 4px; }
+.wp-item:hover { background: #3a3a3a; }
+.wp-item.selected { background: #0e3a5c; border-color: #0e639c; }
+.wp-item.task-point { border-left: 3px solid #e8a020; }
+.wp-item input[type=checkbox] { cursor: pointer; }
+.wp-id { color: #9cdcfe; flex: 1; }
+.wp-speed { color: #4ec9b0; font-size: 10px; }
+.wp-task { color: #ce9178; font-size: 10px; }
+
+/* edit form */
+#edit-form { padding: 8px; border-top: 1px solid #444; background: #2a2a2a; }
+#edit-form h4 { font-size: 11px; color: #9cdcfe; margin-bottom: 6px; }
+.field { margin-bottom: 6px; }
+.field label { display: block; font-size: 11px; color: #888; margin-bottom: 2px; }
+.field select, .field input[type=text] { width: 100%; padding: 3px 6px; background: #3a3a3a; border: 1px solid #555; color: #eee; border-radius: 3px; font-family: monospace; font-size: 12px; }
+.checks { display: flex; gap: 10px; flex-wrap: wrap; }
+.checks label { font-size: 11px; color: #aaa; display: flex; align-items: center; gap: 3px; cursor: pointer; }
+#apply-btn { width: 100%; padding: 4px; background: #0e639c; border: none; color: #fff; border-radius: 3px; cursor: pointer; font-size: 12px; margin-top: 4px; }
+#apply-btn:hover { background: #1177bb; }
+
+/* batch bar */
+#batch-bar { padding: 5px 8px; background: #2a2a2a; border-top: 1px solid #444; display: none; gap: 4px; align-items: center; flex-wrap: wrap; }
+#batch-bar.visible { display: flex; }
+#batch-bar label { font-size: 11px; color: #888; }
+#batch-speed { padding: 3px 6px; background: #3a3a3a; border: 1px solid #555; color: #eee; border-radius: 3px; font-size: 12px; }
+
+/* status */
+#status { padding: 3px 8px; font-size: 11px; color: #888; background: #2d2d2d; border-top: 1px solid #444; flex-shrink: 0; }
+
+/* file picker modal */
+#picker-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+#picker-overlay.visible { display: flex; }
+#picker-box { background: #2d2d2d; border: 1px solid #555; border-radius: 5px; width: 560px; max-height: 70vh; display: flex; flex-direction: column; }
+#picker-header { padding: 8px 12px; border-bottom: 1px solid #444; display: flex; align-items: center; gap: 6px; }
+#picker-cwd { flex: 1; font-size: 11px; color: #9cdcfe; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#picker-list { flex: 1; overflow-y: auto; padding: 4px; }
+.picker-entry { padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.picker-entry:hover { background: #3a3a3a; }
+.picker-entry.dir { color: #dcdcaa; }
+.picker-entry.json { color: #9cdcfe; }
+.picker-entry.other { color: #666; cursor: default; }
+</style>
+</head>
+<body>
+
+<!-- File picker modal -->
+<div id="picker-overlay">
+  <div id="picker-box">
+    <div id="picker-header">
+      <span id="picker-cwd"></span>
+      <button class="btn btn-blue" id="picker-select-dir-btn" style="display:none" onclick="selectCurrentPickerDirectory()">选择当前目录</button>
+      <button class="btn btn-gray" onclick="closePicker()">取消</button>
+    </div>
+    <div id="picker-list"></div>
+  </div>
+</div>
+
+<div id="toolbar">
+  <input type="text" id="task-path" placeholder="任务 JSON 路径">
+  <button class="btn btn-gray" onclick="openPicker()">浏览</button>
+  <button class="btn btn-blue" onclick="loadTask()">加载</button>
+  <button class="btn btn-gray" id="build-sidecar-btn" onclick="buildTaskWorkspaceSidecar()">生成旁路</button>
+  <button class="btn btn-green" id="save-task-btn" onclick="saveTask()">保存</button>
+  <span class="toolbar-meta" id="sidecar-state">旁路: 未加载</span>
+  <a class="toolbar-link" href="/">返回导航页</a>
+</div>
+
+<div id="subtask-tabs" role="tablist" aria-label="子任务标签栏"></div>
+
+<div id="main">
+  <aside id="left-sidebar">
+    <div id="left-sidebar-header">
+      <span>属性路径</span>
+      <button class="btn btn-gray" style="font-size:10px;padding:2px 6px" onclick="toggleLeftSidebar()">收起</button>
+    </div>
+    <div id="left-sidebar-body">
+      <div class="side-block">
+        <div class="side-block-title">waypoint_tasks 目录</div>
+        <div class="side-field">
+          <label for="waypoint-tasks-path">绝对路径</label>
+          <input type="text" id="waypoint-tasks-path" placeholder="/abs/path/to/waypoint_tasks">
+        </div>
+        <div class="side-actions">
+          <button class="btn btn-gray" type="button" onclick="openAttributePicker('waypoint_tasks')">浏览</button>
+        </div>
+      </div>
+      <div class="side-block">
+        <div class="side-block-title">speed_modes 根目录</div>
+        <div class="side-field">
+          <label for="speed-modes-path">绝对路径</label>
+          <input type="text" id="speed-modes-path" placeholder="/abs/path/to/speed_modes">
+        </div>
+        <div class="side-actions">
+          <button class="btn btn-gray" type="button" onclick="openAttributePicker('speed_modes')">浏览</button>
+        </div>
+      </div>
+      <div class="side-actions">
+        <button class="btn btn-blue" type="button" onclick="loadAttributes()">刷新属性</button>
+      </div>
+      <div class="side-hint">`speed_modes/single_point` 会自动从你填写的 speed_modes 目录下读取。</div>
+    </div>
+  </aside>
+  <div id="canvas-wrap">
+    <canvas id="map-canvas"></canvas>
+  </div>
+  <div id="panel">
+    <div id="panel-header">
+      <span>路点列表</span>
+      <button class="btn btn-gray" style="font-size:10px;padding:2px 6px" onclick="toggleSelectAll()">全选</button>
+    </div>
+    <div id="subtask-meta">
+      <div class="subtask-meta-title">当前子任务属性</div>
+      <div class="subtask-meta-row">
+        <label><input type="checkbox" id="f-change-loc" onchange="applySubtaskMeta()"> change_loc</label>
+      </div>
+    </div>
+    <div id="waypoint-list"></div>
+
+    <!-- batch bar -->
+    <div id="batch-bar">
+      <label>批量 speed_mode:</label>
+      <select id="batch-speed"></select>
+      <button class="btn btn-blue" style="font-size:11px;padding:3px 8px" onclick="applyBatch()">应用</button>
+      <button class="btn btn-gray" style="font-size:11px;padding:3px 8px" onclick="clearSelection()">清除选择</button>
+    </div>
+
+    <!-- single edit form -->
+    <div id="edit-form" style="display:none">
+      <h4 id="edit-title">编辑路点</h4>
+      <div class="field">
+        <label>speed_mode</label>
+        <select id="f-speed"></select>
+      </div>
+      <div class="field">
+        <label>waypoint_task_id</label>
+        <input type="text" id="f-task" list="task-suggestions" placeholder="留空则为空">
+        <datalist id="task-suggestions"></datalist>
+      </div>
+      <div class="field checks">
+        <label><input type="checkbox" id="f-task-point" onchange="onTaskPointChange()"> is_task_point</label>
+        <label><input type="checkbox" id="f-single-point" onchange="onSinglePointChange()"> is_single_point</label>
+      </div>
+      <button id="apply-btn" onclick="applyEdit()">应用</button>
+      <button class="btn btn-gray" style="width:100%;margin-top:4px;font-size:12px" onclick="flipOrientation()">翻转朝向 180°</button>
+    </div>
+  </div>
+</div>
+
+<div id="status">就绪</div>
+
+<script>
+let task = null, taskPath = '';
+let sidecarPath = '', sidecarExists = false;
+let currentSubtaskIdx = 0, selectedWpIdx = -1;
+let selectedSet = new Set(); // multi-select indices
+let mapMeta = null, mapImg = null;
+let viewX = 0, viewY = 0, viewScale = 1;
+let dragging = false, dragStart = null;
+let speedModes = [], speedModesSingle = [], waypointTasks = [];
+let defaultBrowseRoot = '/';
+let defaultWaypointTasksPath = '';
+let defaultSpeedModesPath = '';
+let currentPickerMode = 'task';
+let currentPickerCwd = '';
+
+const canvas = document.getElementById('map-canvas');
+const ctx = canvas.getContext('2d');
+
+// Speed mode color map
+const SPEED_COLORS = {
+  high_speed: '#4488ff',
+  normal: '#44bb44',
+  low_speed: '#88cc44',
+  task_point: '#e8a020',
+  single_point: '#e8a020',
+  elevator_in: '#cc44cc',
+  backward: '#ff8844',
+};
+function speedColor(mode) { return SPEED_COLORS[mode] || '#44bb44'; }
+
+function uniqueNames(names) {
+  const seen = new Set();
+  const result = [];
+  names.forEach(name => {
+    const normalized = String(name || '').trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    result.push(normalized);
+  });
+  return result;
+}
+
+function renderSpeedSelect(selectId, {isSingle = false, preferredSpeed = '', keepCurrent = false} = {}) {
+  const sel = document.getElementById(selectId);
+  const currentValue = keepCurrent ? sel.value : '';
+  const fallbackSpeed = String(preferredSpeed || currentValue || 'normal').trim();
+  const baseList = uniqueNames(isSingle ? speedModesSingle : speedModes);
+  const optionList = uniqueNames(baseList.concat(fallbackSpeed ? [fallbackSpeed] : []));
+  sel.innerHTML = optionList.map(name => `<option value="${name}">${name}</option>`).join('');
+  sel.value = optionList.includes(fallbackSpeed) ? fallbackSpeed : (optionList[0] || '');
+}
+
+function defaultPose() {
+  return {
+    position: {x: 0, y: 0, z: 0},
+    orientation: {w: 1, x: 0, y: 0, z: 0},
+  };
+}
+
+function normaliseWaypoint(wp, index) {
+  const next = wp && typeof wp === 'object' ? wp : {};
+  const pose = next.pose && typeof next.pose === 'object' ? next.pose : defaultPose();
+  const position = pose.position && typeof pose.position === 'object' ? pose.position : defaultPose().position;
+  const orientation = pose.orientation && typeof pose.orientation === 'object' ? pose.orientation : defaultPose().orientation;
+  next.pose = {
+    position: {
+      x: Number(position.x ?? 0),
+      y: Number(position.y ?? 0),
+      z: Number(position.z ?? 0),
+    },
+    orientation: {
+      w: Number(orientation.w ?? 1),
+      x: Number(orientation.x ?? 0),
+      y: Number(orientation.y ?? 0),
+      z: Number(orientation.z ?? 0),
+    },
+  };
+  next.waypoint_id = String(next.waypoint_id ?? `wp_${index}`);
+  next.speed_mode = String(next.speed_mode ?? 'normal');
+  next.waypoint_task_id = String(next.waypoint_task_id ?? '');
+  next.is_task_point = !!next.is_task_point;
+  next.is_single_point = !!next.is_single_point;
+  return next;
+}
+
+function normaliseTaskDocument(document) {
+  const next = document && typeof document === 'object' ? document : {};
+  if (!Array.isArray(next.subtasks)) {
+    next.subtasks = [];
+  }
+  next.subtasks = next.subtasks.map((subtask, subtaskIndex) => {
+    const st = subtask && typeof subtask === 'object' ? subtask : {};
+    st.subtask_name = String(st.subtask_name ?? `subtask_${subtaskIndex}`);
+    st.waypoints = Array.isArray(st.waypoints)
+      ? st.waypoints.map((wp, wpIndex) => normaliseWaypoint(wp, wpIndex))
+      : [];
+    return st;
+  });
+  next.task_group_name = String(next.task_group_name ?? '');
+  return next;
+}
+
+function currentSubtask() {
+  return task?.subtasks?.[currentSubtaskIdx] ?? null;
+}
+
+function currentWaypoints() {
+  return currentSubtask()?.waypoints ?? [];
+}
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+async function runButtonFeedback(button, labels, operation) {
+  if (!button) return operation();
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = labels.pending;
+  try {
+    const result = await operation();
+    button.textContent = labels.success;
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.disabled = false;
+    }, 1400);
+    return result;
+  } catch (error) {
+    button.textContent = labels.failure || originalText;
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.disabled = false;
+    }, 1800);
+    throw error;
+  }
+}
+async function loadRuntimeConfig() {
+  const r = await fetch('/api/runtime_config');
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(d.error || `Request failed: ${r.status}`);
+  }
+  defaultBrowseRoot = d.default_browse_root || '/';
+  defaultWaypointTasksPath = d.default_waypoint_tasks_path || '';
+  defaultSpeedModesPath = d.default_speed_modes_path || '';
+  document.getElementById('waypoint-tasks-path').value = defaultWaypointTasksPath;
+  document.getElementById('speed-modes-path').value = defaultSpeedModesPath;
+}
+function updateSidecarState() {
+  const el = document.getElementById('sidecar-state');
+  const buildBtn = document.getElementById('build-sidecar-btn');
+  if (!taskPath) {
+    el.textContent = '旁路: 未加载';
+    buildBtn.disabled = true;
+    return;
+  }
+  if (sidecarExists) {
+    el.textContent = `旁路: ${sidecarPath}`;
+    buildBtn.disabled = true;
+    return;
+  }
+  el.textContent = `旁路: 未生成 (${sidecarPath || '待定'})`;
+  buildBtn.disabled = false;
+}
+
+// Load attributes from server
+async function loadAttributes() {
+  const waypointTasksPath = document.getElementById('waypoint-tasks-path').value.trim();
+  const speedModesPath = document.getElementById('speed-modes-path').value.trim();
+  const params = new URLSearchParams();
+  if (waypointTasksPath) params.set('waypoint_tasks_path', waypointTasksPath);
+  if (speedModesPath) params.set('speed_modes_path', speedModesPath);
+  const query = params.toString();
+  const r = await fetch('/api/attributes' + (query ? `?${query}` : ''));
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(d.error || `Request failed: ${r.status}`);
+  }
+  speedModes = d.speed_modes;
+  speedModesSingle = d.speed_modes_single;
+  waypointTasks = d.waypoint_tasks;
+  renderSpeedSelect('batch-speed', {isSingle: false, keepCurrent: true});
+  const currentWp = currentWaypoints()[selectedWpIdx];
+  if (currentWp) {
+    renderSpeedSelect('f-speed', {
+      isSingle: !!currentWp.is_single_point,
+      preferredSpeed: currentWp.speed_mode,
+    });
+  } else {
+    renderSpeedSelect('f-speed', {isSingle: false, keepCurrent: true});
+  }
+  document.getElementById('task-suggestions').innerHTML =
+    waypointTasks.map(t => `<option value="${t}">`).join('');
+  setStatus(`属性已刷新: speed_modes=${speedModes.length}, single_point=${speedModesSingle.length}, waypoint_tasks=${waypointTasks.length}`);
+}
+
+// File picker
+let pickerResolve = null;
+function openPicker() {
+  currentPickerMode = 'task';
+  const startPath = document.getElementById('task-path').value.trim() ||
+    defaultBrowseRoot;
+  browseTo(startPath);
+  document.getElementById('picker-overlay').classList.add('visible');
+}
+function openAttributePicker(kind) {
+  currentPickerMode = kind;
+  const inputId = kind === 'waypoint_tasks' ? 'waypoint-tasks-path' : 'speed-modes-path';
+  const fallback = kind === 'waypoint_tasks' ? defaultWaypointTasksPath : defaultSpeedModesPath;
+  const startPath = document.getElementById(inputId).value.trim() || fallback || defaultBrowseRoot;
+  browseTo(startPath);
+  document.getElementById('picker-overlay').classList.add('visible');
+}
+function closePicker() { document.getElementById('picker-overlay').classList.remove('visible'); }
+
+async function browseTo(path) {
+  const r = await fetch('/api/browse', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path})});
+  const d = await r.json();
+  currentPickerCwd = d.cwd;
+  document.getElementById('picker-cwd').textContent = d.cwd;
+  document.getElementById('picker-select-dir-btn').style.display =
+    currentPickerMode === 'task' ? 'none' : 'inline-block';
+  const list = document.getElementById('picker-list');
+  list.innerHTML = '';
+  // Parent dir
+  const up = document.createElement('div');
+  up.className = 'picker-entry dir';
+  up.innerHTML = '&#128193; ..';
+  up.onclick = () => browseTo(d.parent);
+  list.appendChild(up);
+  d.entries.forEach(e => {
+    const div = document.createElement('div');
+    if (e.is_dir) {
+      div.className = 'picker-entry dir';
+      div.innerHTML = `&#128193; ${e.name}`;
+      div.onclick = () => browseTo(e.path);
+    } else if (e.is_json) {
+      div.className = 'picker-entry json';
+      div.innerHTML = `&#128196; ${e.name}`;
+      div.onclick = () => {
+        document.getElementById('task-path').value = e.path;
+        closePicker();
+        loadTask();
+      };
+    } else {
+      div.className = 'picker-entry other';
+      div.textContent = e.name;
+    }
+    list.appendChild(div);
+  });
+}
+
+function selectCurrentPickerDirectory() {
+  if (currentPickerMode !== 'waypoint_tasks' && currentPickerMode !== 'speed_modes') return;
+  const targetInput = currentPickerMode === 'waypoint_tasks' ? 'waypoint-tasks-path' : 'speed-modes-path';
+  document.getElementById(targetInput).value = currentPickerCwd;
+  closePicker();
+  loadAttributes().catch(error => setStatus('属性刷新失败: ' + error.message));
+}
+
+async function loadTask() {
+  try {
+    taskPath = document.getElementById('task-path').value.trim();
+    if (!taskPath) return;
+    const r = await fetch('/api/load_task_bundle', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path: taskPath})});
+    const bundle = await r.json().catch(() => ({}));
+    if (!r.ok) { setStatus('加载失败: ' + (bundle.error || `Request failed: ${r.status}`)); return; }
+    task = normaliseTaskDocument(bundle.task);
+    sidecarPath = bundle.sidecar_path || '';
+    sidecarExists = !!bundle.sidecar_exists;
+    currentSubtaskIdx = 0; selectedWpIdx = -1; selectedSet.clear();
+    renderTabs();
+    if (task.subtasks.length) {
+      await switchSubtask(0);
+    } else {
+      mapMeta = null; mapImg = null;
+      document.getElementById('edit-form').style.display = 'none';
+      document.getElementById('batch-bar').classList.remove('visible');
+      renderSubtaskMeta();
+      renderWaypointList();
+      resizeCanvas();
+      draw();
+    }
+    updateSidecarState();
+    setStatus(sidecarExists ? ('已加载: ' + taskPath + ' | 已检测到旁路') : ('已加载: ' + taskPath + ' | 可生成旁路'));
+  } catch (error) {
+    setStatus('加载失败: ' + error.message);
+  }
+}
+
+async function buildTaskWorkspaceSidecar() {
+  if (!taskPath) { setStatus('请先加载任务'); return; }
+  const r = await fetch('/api/build_task_workspace_sidecar', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path: taskPath})});
+  if (!r.ok) { setStatus('旁路生成失败: ' + (await r.json()).error); return; }
+  const payload = await r.json();
+  sidecarPath = payload.sidecar_path || '';
+  sidecarExists = true;
+  updateSidecarState();
+  setStatus('旁路已生成: ' + sidecarPath);
+}
+
+function renderTabs() {
+  const el = document.getElementById('subtask-tabs');
+  el.innerHTML = '';
+  (task?.subtasks || []).forEach((st, i) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'tab-button' + (i === currentSubtaskIdx ? ' active' : '');
+    button.dataset.subtaskIndex = String(i);
+    button.setAttribute('role', 'tab');
+    button.setAttribute('aria-selected', i === currentSubtaskIdx ? 'true' : 'false');
+    button.textContent = st.subtask_name;
+    el.appendChild(button);
+  });
+}
+
+function renderSubtaskMeta() {
+  const block = document.getElementById('subtask-meta');
+  const checkbox = document.getElementById('f-change-loc');
+  const subtask = currentSubtask();
+  if (!subtask) {
+    block.style.display = 'none';
+    checkbox.checked = false;
+    return;
+  }
+  block.style.display = 'block';
+  checkbox.checked = !!subtask.change_loc;
+}
+
+function applySubtaskMeta() {
+  const subtask = currentSubtask();
+  if (!subtask) return;
+  subtask.change_loc = document.getElementById('f-change-loc').checked;
+  setStatus(`已更新子任务属性: ${subtask.subtask_name} | change_loc=${subtask.change_loc ? 'true' : 'false'}`);
+}
+
+async function switchSubtask(idx) {
+  if (!task?.subtasks?.length) return;
+  const nextIdx = Number(idx);
+  if (!Number.isInteger(nextIdx) || nextIdx < 0 || nextIdx >= task.subtasks.length) {
+    setStatus('子任务索引无效');
+    return;
+  }
+  currentSubtaskIdx = nextIdx; selectedWpIdx = -1; selectedSet.clear();
+  document.getElementById('edit-form').style.display = 'none';
+  document.getElementById('batch-bar').classList.remove('visible');
+  renderTabs(); renderSubtaskMeta(); renderWaypointList();
+  const st = currentSubtask();
+  if (!st) return;
+  if (st.map_url) {
+    await loadMap(st.map_url);
+  } else {
+    mapMeta = null; mapImg = null; resizeCanvas(); draw();
+    setStatus(`已切换子任务: ${st.subtask_name}`);
+  }
+}
+
+async function loadMap(yamlPath) {
+  const subtaskName = currentSubtask()?.subtask_name || '当前子任务';
+  setStatus(`加载地图: ${subtaskName}`);
+  const r = await fetch('/api/load_map', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({yaml_path: yamlPath})});
+  if (!r.ok) {
+    mapMeta = null; mapImg = null; resizeCanvas(); draw();
+    setStatus(`已切换子任务: ${subtaskName} | 地图加载失败`);
+    return;
+  }
+  mapMeta = await r.json();
+  mapImg = new Image();
+  mapImg.onload = () => { resizeCanvas(); fitView(); draw(); setStatus(`已切换子任务: ${subtaskName}`); };
+  mapImg.src = 'data:image/png;base64,' + mapMeta.image_b64;
+}
+
+function resizeCanvas() {
+  const wrap = document.getElementById('canvas-wrap');
+  canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight;
+}
+function fitView() {
+  if (!mapImg) return;
+  const s = Math.min(canvas.width / mapImg.width, canvas.height / mapImg.height) * 0.9;
+  viewScale = s;
+  viewX = (canvas.width - mapImg.width * s) / 2;
+  viewY = (canvas.height - mapImg.height * s) / 2;
+}
+function worldToCanvas(wx, wy) {
+  if (!mapMeta) return [wx * 20 + canvas.width/2, -wy * 20 + canvas.height/2];
+  const [ox, oy] = mapMeta.origin;
+  const res = mapMeta.resolution;
+  const imgH = mapImg ? mapImg.height : 0;
+  return [viewX + (wx - ox) / res * viewScale, viewY + (imgH - (wy - oy) / res) * viewScale];
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (mapImg) ctx.drawImage(mapImg, viewX, viewY, mapImg.width * viewScale, mapImg.height * viewScale);
+  if (!task) return;
+  const wps = currentWaypoints();
+  // path line
+  ctx.strokeStyle = 'rgba(100,180,255,0.4)'; ctx.lineWidth = 1.5; ctx.beginPath();
+  wps.forEach((wp, i) => {
+    const [cx, cy] = worldToCanvas(wp.pose.position.x, wp.pose.position.y);
+    i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy);
+  });
+  ctx.stroke();
+  // waypoints
+  wps.forEach((wp, i) => {
+    const [cx, cy] = worldToCanvas(wp.pose.position.x, wp.pose.position.y);
+    const isSel = i === selectedWpIdx;
+    const isMulti = selectedSet.has(i);
+    const isTask = wp.is_task_point;
+    const r = isSel ? 9 : (isTask ? 7 : 5);
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = isSel ? '#ff4444' : (isMulti ? '#ff9900' : (isTask ? '#e8a020' : speedColor(wp.speed_mode)));
+    ctx.fill();
+    ctx.strokeStyle = isMulti ? '#fff' : 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = isSel || isMulti ? 2 : 1; ctx.stroke();
+    // orientation arrow
+    const o = wp.pose.orientation;
+    const yaw = Math.atan2(2*(o.w*o.z + o.x*o.y), 1 - 2*(o.y*o.y + o.z*o.z));
+    // yaw in ROS: +x forward, canvas: x right, y down → negate yaw
+    const arrowLen = r + 8;
+    const ax = cx + Math.cos(-yaw) * arrowLen;
+    const ay = cy + Math.sin(-yaw) * arrowLen;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ax, ay);
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1.5; ctx.stroke();
+    // arrowhead
+    const headLen = 4, headAngle = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - headLen*Math.cos(-yaw - headAngle), ay - headLen*Math.sin(-yaw - headAngle));
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - headLen*Math.cos(-yaw + headAngle), ay - headLen*Math.sin(-yaw + headAngle));
+    ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = '9px monospace';
+    ctx.fillText(i, cx + r + 1, cy - 2);
+  });
+}
+
+function renderWaypointList() {
+  const el = document.getElementById('waypoint-list');
+  el.innerHTML = '';
+  const wps = currentWaypoints();
+  wps.forEach((wp, i) => {
+    const d = document.createElement('div');
+    d.className = 'wp-item' + (wp.is_task_point ? ' task-point' : '') + (i === selectedWpIdx ? ' selected' : '');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = selectedSet.has(i);
+    cb.onclick = e => { e.stopPropagation(); toggleMultiSelect(i, cb.checked); };
+    d.appendChild(cb);
+    const info = document.createElement('span');
+    info.className = 'wp-id'; info.textContent = wp.waypoint_id;
+    const speed = document.createElement('span');
+    speed.className = 'wp-speed'; speed.textContent = ` [${wp.speed_mode}]`;
+    speed.style.color = speedColor(wp.speed_mode);
+    d.appendChild(info); d.appendChild(speed);
+    if (wp.waypoint_task_id) {
+      const t = document.createElement('div');
+      t.className = 'wp-task'; t.textContent = wp.waypoint_task_id;
+      d.appendChild(t);
+    }
+    d.onclick = () => selectWaypoint(i);
+    el.appendChild(d);
+  });
+  updateBatchBar();
+}
+
+function toggleMultiSelect(idx, checked) {
+  if (checked) selectedSet.add(idx); else selectedSet.delete(idx);
+  updateBatchBar(); draw();
+}
+function toggleSelectAll() {
+  const wps = currentWaypoints();
+  if (!wps.length) return;
+  if (selectedSet.size === wps.length) selectedSet.clear();
+  else wps.forEach((_, i) => selectedSet.add(i));
+  renderWaypointList(); draw();
+}
+function clearSelection() { selectedSet.clear(); renderWaypointList(); draw(); }
+function updateBatchBar() {
+  const bar = document.getElementById('batch-bar');
+  if (selectedSet.size > 1) bar.classList.add('visible');
+  else bar.classList.remove('visible');
+}
+
+function toggleLeftSidebar() {
+  const sidebar = document.getElementById('left-sidebar');
+  const button = document.querySelector('#left-sidebar-header button');
+  const collapsed = sidebar.classList.toggle('collapsed');
+  sidebar.style.width = collapsed ? '42px' : '288px';
+  sidebar.style.flexBasis = collapsed ? '42px' : '288px';
+  button.textContent = collapsed ? '展开' : '收起';
+}
+
+function applyBatch() {
+  if (!task || selectedSet.size === 0) return;
+  const mode = document.getElementById('batch-speed').value;
+  const wps = currentWaypoints();
+  selectedSet.forEach(i => {
+    if (wps[i]) wps[i].speed_mode = mode;
+  });
+  renderWaypointList(); draw();
+  setStatus(`批量设置 ${selectedSet.size} 个路点 speed_mode=${mode}`);
+}
+
+function onTaskPointChange() {
+  const isTask = document.getElementById('f-task-point').checked;
+  document.getElementById('f-task').disabled = !isTask;
+  if (!isTask) document.getElementById('f-task').value = '';
+}
+
+function onSinglePointChange() {
+  const isSingle = document.getElementById('f-single-point').checked;
+  renderSpeedSelect('f-speed', {isSingle, keepCurrent: true});
+}
+
+function selectWaypoint(idx) {
+  const wp = currentWaypoints()[idx];
+  if (!wp) return;
+  selectedWpIdx = idx; renderWaypointList(); draw();
+  document.getElementById('edit-title').textContent = `编辑: ${wp.waypoint_id}`;
+  document.getElementById('f-task-point').checked = !!wp.is_task_point;
+  document.getElementById('f-single-point').checked = !!wp.is_single_point;
+  // update speed list based on is_single_point
+  renderSpeedSelect('f-speed', {
+    isSingle: !!wp.is_single_point,
+    preferredSpeed: wp.speed_mode,
+  });
+  // task field enabled only if is_task_point
+  const taskInput = document.getElementById('f-task');
+  taskInput.disabled = !wp.is_task_point;
+  taskInput.value = wp.waypoint_task_id || '';
+  document.getElementById('edit-form').style.display = 'block';
+}
+
+function flipOrientation() {
+  if (selectedWpIdx < 0 || !task) return;
+  const wp = currentWaypoints()[selectedWpIdx];
+  if (!wp) return;
+  const o = wp.pose.orientation;
+  // Rotate 180° around Z: multiply quaternion by (0,0,1,0)
+  // q * (0,0,sin90,cos90) where sin90=1,cos90=0 → (w,x,y,z)*(0,0,1,0)
+  const {w, x, y, z} = o;
+  o.w = -z; o.x = -y; o.y = x; o.z = w;
+  draw();
+  setStatus('已翻转朝向: ' + wp.waypoint_id);
+}
+
+function applyEdit() {
+  if (selectedWpIdx < 0 || !task) return;
+  const wp = currentWaypoints()[selectedWpIdx];
+  if (!wp) return;
+  wp.speed_mode = document.getElementById('f-speed').value;
+  wp.waypoint_task_id = document.getElementById('f-task').disabled ? '' : document.getElementById('f-task').value.trim();
+  wp.is_task_point = document.getElementById('f-task-point').checked;
+  wp.is_single_point = document.getElementById('f-single-point').checked;
+  renderWaypointList(); draw();
+  setStatus('已应用: ' + wp.waypoint_id);
+}
+
+async function saveTask() {
+  if (!task || !taskPath) { setStatus('未加载任务'); return; }
+  try {
+    await runButtonFeedback(
+      document.getElementById('save-task-btn'),
+      { pending: '保存中...', success: '已保存', failure: '保存失败' },
+      async () => {
+        setStatus('正在保存任务与旁路...');
+        const r = await fetch('/api/save_task_bundle', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path: taskPath, task})});
+        if (!r.ok) { throw new Error((await r.json()).error); }
+        const payload = await r.json();
+        sidecarPath = payload.sidecar_path || sidecarPath;
+        sidecarExists = true;
+        updateSidecarState();
+        setStatus('保存成功，任务与旁路已更新: ' + taskPath);
+      },
+    );
+  } catch (error) {
+    setStatus('保存失败: ' + error.message);
+  }
+}
+
+// Canvas interaction
+canvas.addEventListener('click', e => {
+  if (!task) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const wps = currentWaypoints();
+  let best = -1, bestD = 15;
+  wps.forEach((wp, i) => {
+    const [cx, cy] = worldToCanvas(wp.pose.position.x, wp.pose.position.y);
+    const d = Math.hypot(mx - cx, my - cy);
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  if (best >= 0) selectWaypoint(best);
+});
+canvas.addEventListener('mousedown', e => {
+  if (e.button === 1 || e.button === 2) { dragging = true; dragStart = [e.clientX - viewX, e.clientY - viewY]; }
+});
+canvas.addEventListener('mousemove', e => {
+  if (dragging) { viewX = e.clientX - dragStart[0]; viewY = e.clientY - dragStart[1]; draw(); }
+});
+canvas.addEventListener('mouseup', () => dragging = false);
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const f = e.deltaY < 0 ? 1.1 : 0.9;
+  viewX = mx - (mx - viewX) * f; viewY = my - (my - viewY) * f; viewScale *= f; draw();
+}, {passive: false});
+window.addEventListener('resize', () => { resizeCanvas(); draw(); });
+
+resizeCanvas();
+Promise.all([loadRuntimeConfig()]).then(() => loadAttributes()).catch(error => {
+  setStatus('初始化失败: ' + error.message);
+});
+updateSidecarState();
+
+function resolveTabButtonFromPoint(clientX, clientY) {
+  const buttons = Array.from(document.querySelectorAll('#subtask-tabs .tab-button'));
+  const exactMatch = buttons.find(button => {
+    const rect = button.getBoundingClientRect();
+    return (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    );
+  });
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const hitPadding = 8;
+  const candidates = buttons
+    .map(button => {
+      const rect = button.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const withinExpandedBounds = (
+        clientX >= rect.left - hitPadding &&
+        clientX <= rect.right + hitPadding &&
+        clientY >= rect.top - hitPadding &&
+        clientY <= rect.bottom + hitPadding
+      );
+      const rowDistance = Math.abs(clientY - centerY);
+      const centerDistance = Math.abs(clientX - centerX);
+      return {button, withinExpandedBounds, rowDistance, centerDistance};
+    })
+    .filter(item => item.withinExpandedBounds);
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  candidates.sort((left, right) => {
+    if (left.rowDistance !== right.rowDistance) {
+      return left.rowDistance - right.rowDistance;
+    }
+    return left.centerDistance - right.centerDistance;
+  });
+  return candidates[0].button;
+}
+
+document.getElementById('subtask-tabs').addEventListener('pointerdown', event => {
+  if (!task) return;
+  const directTarget = event.target instanceof Element ? event.target.closest('.tab-button') : null;
+  const button = directTarget || resolveTabButtonFromPoint(event.clientX, event.clientY);
+  if (!button || !button.dataset.subtaskIndex) return;
+  event.preventDefault();
+  const idx = Number(button.dataset.subtaskIndex);
+  if (Number.isInteger(idx)) {
+    switchSubtask(idx);
+  }
+});
+</script>
+</body>
+</html>

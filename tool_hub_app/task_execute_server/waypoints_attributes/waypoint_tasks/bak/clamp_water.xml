@@ -1,0 +1,12 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaterDeliverySequence">
+      <!-- 打开平台 -->
+      <OpenPlatform name="open_platform"/>
+      <!-- 等待5s -->
+      <Wait wait_duration="5"/>
+      <!-- 夹取水桶 -->
+      <ClampWater name="clamp_water"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

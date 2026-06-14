@@ -1,0 +1,11 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="NavigateWithUnloadingWater">
+      <ChangeUssStatus status="false"/>
+      <!--Spin spin_dist="3.14"/>
+      <!-- 放置水桶 -->
+      <PlaceWater name="place_water" server_timeout="50"/>
+      <MoveForward forward_dist="0.4" forward_speed="0.1" server_timeout="15"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

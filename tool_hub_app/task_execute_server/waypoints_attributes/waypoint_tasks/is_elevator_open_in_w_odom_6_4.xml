@@ -1,0 +1,12 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <!-- 使用默认参数 -->
+      <ChangeUssStatus status="true"/>
+      <ElevatorCaller target_floor="6" server_name="/elevator_command"/>
+      <ElevatorDoorKeeper command="6+"/>
+      <ElevatorStatus enable="true" 
+                     car_status="in"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

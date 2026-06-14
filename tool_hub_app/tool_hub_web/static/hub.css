@@ -1,0 +1,114 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Liberation Mono", monospace;
+  color: #d6deeb;
+  background:
+    radial-gradient(circle at top left, rgba(67, 135, 201, 0.24), transparent 32%),
+    linear-gradient(160deg, #0c1218, #111821 60%, #0d1117);
+}
+
+.hub-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 2.5rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.hub-hero {
+  padding: 1.5rem;
+  border: 1px solid #22303c;
+  border-radius: 18px;
+  background: rgba(12, 18, 24, 0.86);
+}
+
+.hub-kicker {
+  margin: 0 0 0.5rem;
+  color: #8ca4b8;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.78rem;
+}
+
+.hub-hero h1 {
+  margin: 0 0 0.65rem;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+}
+
+.hub-subtitle {
+  margin: 0;
+  max-width: 60ch;
+  color: #8ca4b8;
+}
+
+.hub-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.95rem 1.1rem;
+  border: 1px solid #22303c;
+  border-radius: 14px;
+  background: rgba(15, 21, 29, 0.9);
+}
+
+.hub-flow strong {
+  color: #8ecdf2;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.tool-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1.1rem;
+  border: 1px solid #22303c;
+  border-radius: 16px;
+  background: rgba(15, 21, 29, 0.94);
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.tool-card[data-recent="true"] {
+  border-color: #4db0e8;
+  box-shadow: 0 0 0 1px rgba(77, 176, 232, 0.24);
+}
+
+.tool-card:hover {
+  transform: translateY(-2px);
+  border-color: #4db0e8;
+}
+
+.tool-card h2,
+.tool-card p {
+  margin: 0;
+}
+
+.tool-card h2 {
+  font-size: 1.05rem;
+}
+
+.tool-scenario {
+  color: #8ca4b8;
+  font-size: 0.9rem;
+}
+
+.tool-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 0.95rem;
+  border-radius: 10px;
+  color: #d6deeb;
+  text-decoration: none;
+  border: 1px solid #314456;
+  background: #183349;
+}

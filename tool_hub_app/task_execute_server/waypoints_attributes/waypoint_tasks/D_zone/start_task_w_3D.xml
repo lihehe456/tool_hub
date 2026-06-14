@@ -1,0 +1,19 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="StartSequence">
+      <!-- 打开平台 -->
+      <!--OpenPlatform name="open_platform"/-->
+      <!-- 等待5s -->
+      <!--Wait wait_duration="5"/-->
+      <!-- 夹取水桶 -->
+      <!--ClampWater name="clamp_water"/-->
+      <!-- 关闭AMCL定位服务 -->
+      <EnableAmcl service_name="/enable_amcl" data="false"/>
+      <ChangeUssStatus status="true"/>
+      <!--Wait wait_duration="1"/-->
+      <!-- 禁用 TF 广播（使用默认值） -->
+      <!--SetTfBroadcast enable="false"/-->
+
+    </Sequence>
+  </BehaviorTree>
+</root>
