@@ -1,4 +1,5 @@
 from pathlib import Path
+import struct
 
 import pytest
 
@@ -34,13 +35,59 @@ def write_ascii_pcd(path: Path, points):
     )
 
 
+def lzf_literal_compress(data: bytes) -> bytes:
+    chunks = []
+    for start in range(0, len(data), 32):
+        chunk = data[start : start + 32]
+        chunks.append(bytes([len(chunk) - 1]) + chunk)
+    return b"".join(chunks)
+
+
+def write_binary_compressed_pcd(path: Path, points):
+    fields = ["x", "y", "z"]
+    field_blocks = []
+    for field_index in range(len(fields)):
+        field_blocks.append(b"".join(struct.pack("<f", point[field_index]) for point in points))
+    uncompressed = b"".join(field_blocks)
+    compressed = lzf_literal_compress(uncompressed)
+    header = "\n".join(
+        [
+            "# .PCD v0.7 - Point Cloud Data file format",
+            "VERSION 0.7",
+            "FIELDS x y z",
+            "SIZE 4 4 4",
+            "TYPE F F F",
+            "COUNT 1 1 1",
+            f"WIDTH {len(points)}",
+            "HEIGHT 1",
+            "VIEWPOINT 0 0 0 1 0 0 0",
+            f"POINTS {len(points)}",
+            "DATA binary_compressed",
+        ]
+    ).encode("ascii") + b"\n"
+    path.write_bytes(header + struct.pack("<II", len(compressed), len(uncompressed)) + compressed)
+
+
 def test_parse_ascii_pcd_extracts_xyz_points(tmp_path):
     pcd_path = tmp_path / "sample.pcd"
     write_ascii_pcd(pcd_path, [(1.0, 2.0, 0.1), (3.0, 4.0, 0.2)])
 
     points = parse_pcd_file(pcd_path)
 
-    assert points == [(1.0, 2.0, 0.1), (3.0, 4.0, 0.2)]
+    assert len(points) == 2
+    assert points[0] == pytest.approx((1.0, 2.0, 0.1))
+    assert points[1] == pytest.approx((3.0, 4.0, 0.2))
+
+
+def test_parse_binary_compressed_pcd_extracts_xyz_points(tmp_path):
+    pcd_path = tmp_path / "compressed.pcd"
+    write_binary_compressed_pcd(pcd_path, [(1.0, 2.0, 0.1), (3.0, 4.0, 0.2)])
+
+    points = parse_pcd_file(pcd_path)
+
+    assert len(points) == 2
+    assert points[0] == pytest.approx((1.0, 2.0, 0.1))
+    assert points[1] == pytest.approx((3.0, 4.0, 0.2))
 
 
 def test_convert_pcd_to_map_matches_original_slice_projection(tmp_path):

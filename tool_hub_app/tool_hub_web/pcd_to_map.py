@@ -78,7 +78,7 @@ def parse_pcd_file(path):
     if data_type == "binary":
         return _parse_binary_points(data, metadata)
     if data_type == "binary_compressed":
-        raise ValueError("binary_compressed PCD is not supported yet")
+        return _parse_binary_compressed_points(data, metadata)
     raise ValueError(f"Unsupported PCD DATA type: {metadata.get('data', '')}")
 
 
@@ -195,6 +195,97 @@ def _parse_binary_points(data, metadata):
             )
         )
     return points
+
+
+def _parse_binary_compressed_points(data, metadata):
+    if len(data) < 8:
+        raise ValueError("Invalid binary_compressed PCD: missing compressed size header")
+    compressed_size, uncompressed_size = struct.unpack_from("<II", data, 0)
+    compressed = data[8 : 8 + compressed_size]
+    if len(compressed) != compressed_size:
+        raise ValueError("Invalid binary_compressed PCD: truncated compressed data")
+    decompressed = _lzf_decompress(compressed, uncompressed_size)
+    return _parse_binary_compressed_xyz_blocks(decompressed, metadata)
+
+
+def _parse_binary_compressed_xyz_blocks(data, metadata):
+    fields = metadata["fields"]
+    sizes = metadata.get("size", [])
+    counts = metadata.get("count", [1] * len(fields))
+    point_count = metadata.get("points") or metadata.get("width", 0) * metadata.get("height", 1)
+    field_sizes = [size * count for size, count in zip(sizes, counts)]
+    field_offsets = {}
+    offset = 0
+    for field, field_size in zip(fields, field_sizes):
+        field_offsets[field] = offset
+        offset += field_size * point_count
+    expected_size = sum(field_size * point_count for field_size in field_sizes)
+    if len(data) < expected_size:
+        raise ValueError("Invalid binary_compressed PCD: decompressed data is truncated")
+
+    points = []
+    for index in range(point_count):
+        points.append(
+            (
+                _unpack_compressed_field(data, metadata, field_offsets, "x", index, point_count),
+                _unpack_compressed_field(data, metadata, field_offsets, "y", index, point_count),
+                _unpack_compressed_field(data, metadata, field_offsets, "z", index, point_count),
+            )
+        )
+    return points
+
+
+def _unpack_compressed_field(data, metadata, field_offsets, field_name, point_index, point_count):
+    fields = metadata["fields"]
+    field_index = fields.index(field_name)
+    size = metadata["size"][field_index]
+    value_type = metadata["type"][field_index]
+    count = metadata.get("count", [1] * len(fields))[field_index]
+    if count != 1:
+        raise ValueError(f"Unsupported binary_compressed PCD field count for {field_name}: {count}")
+    fmt = "<" + _struct_format(size, value_type)
+    offset = field_offsets[field_name] + point_index * size
+    return float(struct.unpack_from(fmt, data, offset)[0])
+
+
+def _lzf_decompress(data, expected_size):
+    output = bytearray()
+    index = 0
+    data_length = len(data)
+    while index < data_length:
+        control = data[index]
+        index += 1
+        if control < 32:
+            length = control + 1
+            output.extend(data[index : index + length])
+            index += length
+            continue
+
+        length = control >> 5
+        reference_offset = (control & 0x1F) << 8
+        if index >= data_length:
+            raise ValueError("Invalid LZF stream: missing reference byte")
+        reference_offset += data[index]
+        index += 1
+        if length == 7:
+            if index >= data_length:
+                raise ValueError("Invalid LZF stream: missing extended length")
+            length += data[index]
+            index += 1
+        length += 2
+
+        reference_index = len(output) - reference_offset - 1
+        if reference_index < 0:
+            raise ValueError("Invalid LZF stream: reference before output")
+        for _ in range(length):
+            output.append(output[reference_index])
+            reference_index += 1
+
+    if len(output) != expected_size:
+        raise ValueError(
+            f"Invalid LZF stream: expected {expected_size} bytes, got {len(output)} bytes"
+        )
+    return bytes(output)
 
 
 def _struct_format(size, value_type):

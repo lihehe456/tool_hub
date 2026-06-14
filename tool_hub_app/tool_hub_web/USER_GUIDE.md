@@ -952,8 +952,7 @@ demo.workspace.json
 
 注意事项：
 
-- 当前支持常见 `ascii` 和 `binary` PCD。
-- 暂不支持 `binary_compressed` PCD，遇到时会给出明确错误。
+- 当前支持常见 `ascii`、`binary` 和 PCL `binary_compressed` PCD。
 - 点云很大时，预览多个切片会耗时，建议先用 2 到 3 个候选高度范围。
 - 导出的地图可直接用于 Path Editor 或 Virtual Wall Builder 加载。
 
