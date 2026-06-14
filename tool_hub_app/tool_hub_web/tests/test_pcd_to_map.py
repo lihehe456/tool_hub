@@ -1,5 +1,7 @@
+import base64
 from pathlib import Path
 import struct
+import zlib
 
 import pytest
 
@@ -68,6 +70,66 @@ def write_binary_compressed_pcd(path: Path, points):
     path.write_bytes(header + struct.pack("<II", len(compressed), len(uncompressed)) + compressed)
 
 
+def write_binary_compressed_pcd_with_extended_lzf_reference(path: Path):
+    point_count = 22
+    uncompressed = b"\x00" * (point_count * 3 * 4)
+    compressed = b"\x00\x00\xe0\xfe\x00"
+    header = "\n".join(
+        [
+            "# .PCD v0.7 - Point Cloud Data file format",
+            "VERSION 0.7",
+            "FIELDS x y z",
+            "SIZE 4 4 4",
+            "TYPE F F F",
+            "COUNT 1 1 1",
+            f"WIDTH {point_count}",
+            "HEIGHT 1",
+            "VIEWPOINT 0 0 0 1 0 0 0",
+            f"POINTS {point_count}",
+            "DATA binary_compressed",
+        ]
+    ).encode("ascii") + b"\n"
+    path.write_bytes(header + struct.pack("<II", len(compressed), len(uncompressed)) + compressed)
+
+
+def decode_preview_png_rgb_rows(preview_png_base64):
+    png = base64.b64decode(preview_png_base64)
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+    offset = 8
+    width = height = color_type = None
+    idat = bytearray()
+    while offset < len(png):
+        length = struct.unpack_from(">I", png, offset)[0]
+        chunk_type = png[offset + 4 : offset + 8]
+        data = png[offset + 8 : offset + 8 + length]
+        offset += 12 + length
+        if chunk_type == b"IHDR":
+            width, height, _, color_type, _, _, _ = struct.unpack(">IIBBBBB", data)
+        elif chunk_type == b"IDAT":
+            idat.extend(data)
+        elif chunk_type == b"IEND":
+            break
+    assert color_type == 2
+    raw = zlib.decompress(bytes(idat))
+    stride = width * 3
+    rows = []
+    cursor = 0
+    for _ in range(height):
+        assert raw[cursor] == 0
+        cursor += 1
+        row = []
+        for column in range(width):
+            start = cursor + column * 3
+            row.append(tuple(raw[start : start + 3]))
+        cursor += stride
+        rows.append(row)
+    return rows
+
+
+def flatten_pixels(rows):
+    return [pixel for row in rows for pixel in row]
+
+
 def test_parse_ascii_pcd_extracts_xyz_points(tmp_path):
     pcd_path = tmp_path / "sample.pcd"
     write_ascii_pcd(pcd_path, [(1.0, 2.0, 0.1), (3.0, 4.0, 0.2)])
@@ -88,6 +150,16 @@ def test_parse_binary_compressed_pcd_extracts_xyz_points(tmp_path):
     assert len(points) == 2
     assert points[0] == pytest.approx((1.0, 2.0, 0.1))
     assert points[1] == pytest.approx((3.0, 4.0, 0.2))
+
+
+def test_parse_binary_compressed_pcd_supports_extended_lzf_references(tmp_path):
+    pcd_path = tmp_path / "compressed_extended_reference.pcd"
+    write_binary_compressed_pcd_with_extended_lzf_reference(pcd_path)
+
+    points = parse_pcd_file(pcd_path)
+
+    assert len(points) == 22
+    assert points == pytest.approx([(0.0, 0.0, 0.0)] * 22)
 
 
 def test_convert_pcd_to_map_matches_original_slice_projection(tmp_path):
@@ -164,6 +236,21 @@ def test_export_map_files_writes_pgm_and_yaml(tmp_path):
     assert "image: demo_map.pgm" in yaml_text
     assert "resolution: 0.05" in yaml_text
     assert "origin: [1.0, 2.0, 0.0]" in yaml_text
+
+
+def test_preview_png_draws_map_tf_axes(tmp_path):
+    pcd_path = tmp_path / "sample.pcd"
+    write_ascii_pcd(pcd_path, [(0.0, 0.0, 0.2), (2.0, 2.0, 0.2)])
+
+    result = convert_pcd_to_map(
+        pcd_path,
+        PcdToMapOptions(z_min=0.0, z_max=0.5, resolution=0.1, radius=0.0, min_neighbors=0),
+    )
+    rows = decode_preview_png_rgb_rows(result.preview_png_base64)
+
+    pixels = flatten_pixels(rows)
+    assert any(pixel == (220, 40, 40) for pixel in pixels)
+    assert any(pixel == (40, 180, 80) for pixel in pixels)
 
 
 def test_convert_rejects_invalid_slice_limits(tmp_path):

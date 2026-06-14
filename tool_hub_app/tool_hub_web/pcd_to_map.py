@@ -263,15 +263,15 @@ def _lzf_decompress(data, expected_size):
 
         length = control >> 5
         reference_offset = (control & 0x1F) << 8
-        if index >= data_length:
-            raise ValueError("Invalid LZF stream: missing reference byte")
-        reference_offset += data[index]
-        index += 1
         if length == 7:
             if index >= data_length:
                 raise ValueError("Invalid LZF stream: missing extended length")
             length += data[index]
             index += 1
+        if index >= data_length:
+            raise ValueError("Invalid LZF stream: missing reference byte")
+        reference_offset += data[index]
+        index += 1
         length += 2
 
         reference_index = len(output) - reference_offset - 1
@@ -446,11 +446,23 @@ def _build_map(points, options):
 
 def _png_base64_from_occupancy(width, height, occupancy):
     raw = bytearray()
+    origin_x = 0
+    origin_y = height - 1
+    axis_length = max(4, min(width, height, 48) // 4)
+    x_axis_end = min(width - 1, origin_x + axis_length)
+    y_axis_end = max(0, origin_y - axis_length)
+
     for row in reversed(range(height)):
         raw.append(0)
+        preview_y = height - 1 - row
         for column in range(width):
             value = occupancy[column + row * width]
-            raw.append(0 if value >= 100 else 254)
+            pixel = (0, 0, 0) if value >= 100 else (254, 254, 254)
+            if preview_y == origin_y and origin_x <= column <= x_axis_end:
+                pixel = (220, 40, 40)
+            if column == origin_x and y_axis_end <= preview_y <= origin_y:
+                pixel = (40, 180, 80)
+            raw.extend(pixel)
     png = _make_png(width, height, bytes(raw))
     return base64.b64encode(png).decode("ascii")
 
@@ -488,7 +500,7 @@ def _make_png(width, height, filtered_rows):
         )
 
     png = b"\x89PNG\r\n\x1a\n"
-    png += make_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0))
+    png += make_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
     png += make_chunk(b"IDAT", zlib.compress(filtered_rows))
     png += make_chunk(b"IEND", b"")
     return png
