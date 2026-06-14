@@ -440,14 +440,19 @@ def _build_map(points, options):
         point_count=len(points),
         z_min=float(options.z_min),
         z_max=float(options.z_max),
-        preview_png_base64=_png_base64_from_occupancy(width, height, occupancy),
+        preview_png_base64=_png_base64_from_occupancy(
+            width,
+            height,
+            occupancy,
+            origin=[round(x_min, 6), round(y_min, 6), 0.0],
+            resolution=float(options.resolution),
+        ),
     )
 
 
-def _png_base64_from_occupancy(width, height, occupancy):
+def _png_base64_from_occupancy(width, height, occupancy, origin, resolution):
     raw = bytearray()
-    origin_x = 0
-    origin_y = height - 1
+    origin_x, origin_y = _preview_origin_pixel(width, height, origin, resolution)
     axis_length = max(4, min(width, height, 48) // 4)
     x_axis_end = min(width - 1, origin_x + axis_length)
     y_axis_end = max(0, origin_y - axis_length)
@@ -458,13 +463,26 @@ def _png_base64_from_occupancy(width, height, occupancy):
         for column in range(width):
             value = occupancy[column + row * width]
             pixel = (0, 0, 0) if value >= 100 else (254, 254, 254)
-            if preview_y == origin_y and origin_x <= column <= x_axis_end:
+            if column == origin_x and preview_y == origin_y:
+                pixel = (255, 230, 96)
+            elif preview_y == origin_y and origin_x <= column <= x_axis_end:
                 pixel = (220, 40, 40)
-            if column == origin_x and y_axis_end <= preview_y <= origin_y:
+            elif column == origin_x and y_axis_end <= preview_y <= origin_y:
                 pixel = (40, 180, 80)
             raw.extend(pixel)
     png = _make_png(width, height, bytes(raw))
     return base64.b64encode(png).decode("ascii")
+
+
+def _preview_origin_pixel(width, height, origin, resolution):
+    origin_x = float(origin[0])
+    origin_y = float(origin[1])
+    column = int(math.floor((-origin_x) / resolution + 1e-9))
+    row = int(math.floor((-origin_y) / resolution + 1e-9))
+    return (
+        max(0, min(width - 1, column)),
+        max(0, min(height - 1, row)),
+    )
 
 
 def _render_pgm(result):

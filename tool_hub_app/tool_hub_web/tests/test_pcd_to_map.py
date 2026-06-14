@@ -238,9 +238,9 @@ def test_export_map_files_writes_pgm_and_yaml(tmp_path):
     assert "origin: [1.0, 2.0, 0.0]" in yaml_text
 
 
-def test_preview_png_draws_map_tf_axes(tmp_path):
+def test_preview_png_draws_yaml_origin_axes(tmp_path):
     pcd_path = tmp_path / "sample.pcd"
-    write_ascii_pcd(pcd_path, [(0.0, 0.0, 0.2), (2.0, 2.0, 0.2)])
+    write_ascii_pcd(pcd_path, [(-1.0, -2.0, 0.2), (1.0, 1.0, 0.2)])
 
     result = convert_pcd_to_map(
         pcd_path,
@@ -248,9 +248,12 @@ def test_preview_png_draws_map_tf_axes(tmp_path):
     )
     rows = decode_preview_png_rgb_rows(result.preview_png_base64)
 
-    pixels = flatten_pixels(rows)
-    assert any(pixel == (220, 40, 40) for pixel in pixels)
-    assert any(pixel == (40, 180, 80) for pixel in pixels)
+    origin_col = int(round((-result.origin[0]) / result.resolution))
+    preview_row = int(round((-result.origin[1]) / result.resolution))
+
+    assert rows[preview_row][origin_col] == (255, 230, 96)
+    assert rows[preview_row][min(origin_col + 1, len(rows[preview_row]) - 1)] == (220, 40, 40)
+    assert rows[max(preview_row - 1, 0)][origin_col] == (40, 180, 80)
 
 
 def test_convert_rejects_invalid_slice_limits(tmp_path):
