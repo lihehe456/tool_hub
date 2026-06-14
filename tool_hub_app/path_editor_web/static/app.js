@@ -15,6 +15,7 @@ import {
 import { installCanvasResizeSync } from "./canvas-resize.js";
 import { PathCanvas } from "./canvas.js";
 import { renderFileTree } from "./file-tree.js";
+import { shouldAutoBrowseOnStartup } from "./startup-policy.js";
 import { createInitialState, reduce } from "./state.js";
 import {
   canCreateTaskWorkspace,
@@ -720,7 +721,9 @@ async function bootstrap() {
   state.maps.cwd = runtimeConfig.maps_root || DEFAULT_MAPS_ROOT;
   pathCanvas.resize();
   render();
-  await Promise.all([refreshFileTree(), refreshMaps()]);
+  if (shouldAutoBrowseOnStartup(runtimeConfig)) {
+    await Promise.all([refreshFileTree(), refreshMaps()]);
+  }
 }
 
 bootstrap().catch((error) => {
