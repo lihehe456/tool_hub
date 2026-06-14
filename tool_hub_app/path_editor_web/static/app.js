@@ -15,7 +15,7 @@ import {
 import { installCanvasResizeSync } from "./canvas-resize.js";
 import { PathCanvas } from "./canvas.js";
 import { renderFileTree } from "./file-tree.js";
-import { shouldAutoBrowseOnStartup, startupBrowseRoot } from "./startup-policy.js";
+import { shouldAutoBrowseOnStartup } from "./startup-policy.js";
 import { createInitialState, reduce } from "./state.js";
 import {
   canCreateTaskWorkspace,
@@ -716,7 +716,7 @@ function bindEvents() {
 async function bootstrap() {
   bindEvents();
   const runtimeConfig = await loadRuntimeConfig();
-  const startupRoot = startupBrowseRoot(runtimeConfig, DEFAULT_PATHS_ROOT);
+  const startupRoot = runtimeConfig.user_root || DEFAULT_PATHS_ROOT;
   state.browser.cwd = startupRoot;
   state.browser.parent = startupRoot;
   state.maps.cwd = startupRoot;
