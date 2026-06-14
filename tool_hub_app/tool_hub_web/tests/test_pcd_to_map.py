@@ -249,7 +249,7 @@ def test_preview_png_draws_yaml_origin_axes(tmp_path):
     rows = decode_preview_png_rgb_rows(result.preview_png_base64)
 
     origin_col = int(round((-result.origin[0]) / result.resolution))
-    preview_row = int(round((-result.origin[1]) / result.resolution))
+    preview_row = len(rows) - 1 - int(round((-result.origin[1]) / result.resolution))
 
     assert rows[preview_row][origin_col] == (255, 230, 96)
     assert rows[preview_row][min(origin_col + 1, len(rows[preview_row]) - 1)] == (220, 40, 40)

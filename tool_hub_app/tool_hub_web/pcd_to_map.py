@@ -452,7 +452,7 @@ def _build_map(points, options):
 
 def _png_base64_from_occupancy(width, height, occupancy, origin, resolution):
     raw = bytearray()
-    origin_x, origin_y = _preview_origin_pixel(width, height, origin, resolution)
+    origin_x, origin_y = _preview_map_tf_pixel(width, height, origin, resolution)
     axis_length = max(4, min(width, height, 48) // 4)
     x_axis_end = min(width - 1, origin_x + axis_length)
     y_axis_end = max(0, origin_y - axis_length)
@@ -474,11 +474,12 @@ def _png_base64_from_occupancy(width, height, occupancy, origin, resolution):
     return base64.b64encode(png).decode("ascii")
 
 
-def _preview_origin_pixel(width, height, origin, resolution):
+def _preview_map_tf_pixel(width, height, origin, resolution):
     origin_x = float(origin[0])
     origin_y = float(origin[1])
     column = int(math.floor((-origin_x) / resolution + 1e-9))
-    row = int(math.floor((-origin_y) / resolution + 1e-9))
+    row_from_bottom = int(math.floor((-origin_y) / resolution + 1e-9))
+    row = height - 1 - row_from_bottom
     return (
         max(0, min(width - 1, column)),
         max(0, min(height - 1, row)),
