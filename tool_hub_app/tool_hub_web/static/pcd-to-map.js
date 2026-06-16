@@ -28,9 +28,12 @@ const el = {
   minNeighbors: document.querySelector("#min-neighbors"),
   flagPassThrough: document.querySelector("#flag-pass-through"),
   includeTrajectoryPreview: document.querySelector("#include-trajectory-preview"),
+  fastPreview: document.querySelector("#fast-preview"),
   includeTrajectoryOverlay: document.querySelector("#include-trajectory-overlay"),
   transform: document.querySelector("#transform"),
   status: document.querySelector("#pcd-status"),
+  progressBar: document.querySelector("#pcd-progress-bar"),
+  progressText: document.querySelector("#pcd-progress-text"),
   sliceList: document.querySelector("#slice-list"),
   previewList: document.querySelector("#preview-list"),
   browsePcd: document.querySelector("#browse-pcd"),
@@ -59,6 +62,12 @@ const el = {
 function setStatus(message, error = false) {
   el.status.textContent = message;
   el.status.dataset.error = error ? "true" : "false";
+}
+
+function setProgress(value, text = "") {
+  const clamped = Math.max(0, Math.min(100, value));
+  el.progressBar.value = clamped;
+  el.progressText.textContent = text || `${clamped}%`;
 }
 
 async function postJson(url, payload) {
@@ -268,8 +277,9 @@ async function previewSlices() {
       z_max: Number(slice.z_max),
     })),
     include_trajectory_preview: el.includeTrajectoryPreview.checked,
+    fast_preview: el.fastPreview.checked,
   };
-  const data = await postJson("/pcd-to-map/api/preview", payload);
+  const data = await runJob("/pcd-to-map/api/preview_job", payload, "/pcd-to-map/api/preview_job");
   state.previews = data.slices;
   state.selectedSliceId = state.previews[0]?.id || "";
   renderPreviews();
@@ -281,14 +291,14 @@ async function exportSelected() {
   if (!selected) {
     throw new Error("请先选择一个预览切片");
   }
-  const data = await postJson("/pcd-to-map/api/export", {
+  const data = await runJob("/pcd-to-map/api/export_job", {
     ...basePayload(),
     output_dir: el.outputDir.value.trim(),
     map_name: el.mapName.value.trim(),
     slice: {z_min: selected.z_min, z_max: selected.z_max},
     include_trajectory_export: true,
     include_trajectory_overlay: el.includeTrajectoryOverlay.checked,
-  });
+  }, "/pcd-to-map/api/export_job");
   const extras = [];
   if (data.trajectory_yaml_path) {
     extras.push("轨迹蒙版");
@@ -297,6 +307,40 @@ async function exportSelected() {
     extras.push("轨迹叠加图");
   }
   setStatus(`导出成功: ${data.yaml_path}${extras.length ? `，已生成${extras.join("、")}` : ""}`);
+}
+
+async function runJob(startUrl, payload, statusUrlBase) {
+  setProgress(0, "0%");
+  setStatus("处理中...");
+  const startResponse = await fetch(startUrl, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload),
+  });
+  const startData = await startResponse.json();
+  if (!startResponse.ok) {
+    throw new Error(startData.error || `HTTP ${startResponse.status}`);
+  }
+  const jobId = startData.job_id;
+  if (!jobId) {
+    throw new Error("job_id is missing");
+  }
+
+  while (true) {
+    const response = await fetch(`${statusUrlBase}/${jobId}`);
+    const job = await response.json();
+    if (!response.ok) {
+      throw new Error(job.error || `HTTP ${response.status}`);
+    }
+    setProgress(job.progress || 0, `${job.progress || 0}% ${job.message || ""}`.trim());
+    if (job.status === "completed") {
+      return job.result;
+    }
+    if (job.status === "failed") {
+      throw new Error(job.error || job.message || "处理失败");
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+  }
 }
 
 async function withButton(button, pendingText, action) {

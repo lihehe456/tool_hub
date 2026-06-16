@@ -8,6 +8,7 @@ import pytest
 from tool_hub_web.pcd_to_map import (
     PcdToMapOptions,
     convert_pcd_to_map,
+    convert_pcd_to_map_preview,
     export_map_files,
     find_trajectory_pcd,
     parse_pcd_file,
@@ -212,6 +213,47 @@ def test_radius_filter_counts_query_point_like_pcl(tmp_path):
     )
 
     assert result.point_count == 1
+
+
+def test_fast_preview_skips_radius_filter_for_sparse_points(tmp_path):
+    pcd_path = tmp_path / "sparse.pcd"
+    write_ascii_pcd(pcd_path, [(0.0, 0.0, 0.2), (10.0, 10.0, 0.2)])
+
+    result = convert_pcd_to_map_preview(
+        pcd_path,
+        PcdToMapOptions(
+            z_min=0.0,
+            z_max=0.5,
+            resolution=1.0,
+            radius=0.5,
+            min_neighbors=10,
+        ),
+        fast_preview=True,
+    )
+
+    assert result.point_count == 2
+
+
+def test_fast_preview_uses_coarser_resolution_for_large_preview(tmp_path):
+    pcd_path = tmp_path / "large_span.pcd"
+    write_ascii_pcd(pcd_path, [(0.0, 0.0, 0.2), (100.0, 100.0, 0.2)])
+
+    result = convert_pcd_to_map_preview(
+        pcd_path,
+        PcdToMapOptions(
+            z_min=0.0,
+            z_max=0.5,
+            resolution=1.0,
+            radius=0.5,
+            min_neighbors=10,
+        ),
+        fast_preview=True,
+        max_preview_dimension=10,
+    )
+
+    assert result.resolution == 10.0
+    assert result.width == 10
+    assert result.height == 10
 
 
 def test_export_map_files_writes_pgm_and_yaml(tmp_path):

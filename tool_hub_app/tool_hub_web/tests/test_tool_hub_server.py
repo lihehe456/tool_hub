@@ -281,6 +281,40 @@ def test_pcd_to_map_preview_and_export_include_same_directory_trajectory(client,
     assert export_payload["trajectory"]["in_bounds_count"] == 2
 
 
+def test_pcd_to_map_preview_job_reports_progress_and_result(client, tmp_path):
+    pcd_path = tmp_path / "map_1.pcd"
+    write_ascii_pcd(
+        pcd_path,
+        [
+            (0.0, 0.0, 0.2),
+            (0.05, 0.0, 0.2),
+            (0.0, 0.05, 0.2),
+        ],
+    )
+
+    start_response = client.post(
+        "/pcd-to-map/api/preview_job",
+        json={
+            "pcd_path": str(pcd_path),
+            "resolution": 0.05,
+            "radius": 0.0,
+            "min_neighbors": 0,
+            "fast_preview": True,
+            "slices": [{"id": "all", "z_min": 0.0, "z_max": 0.5}],
+        },
+    )
+    start_payload = start_response.get_json()
+    job_id = start_payload["job_id"]
+
+    progress_response = client.get(f"/pcd-to-map/api/preview_job/{job_id}")
+    progress_payload = progress_response.get_json()
+
+    assert start_response.status_code == 202
+    assert job_id
+    assert progress_response.status_code == 200
+    assert progress_payload["status"] in {"queued", "running", "completed"}
+
+
 def test_waypoint_task_builder_schema_and_load_save_apis(client, tmp_path):
     tasks_dir = tmp_path / "waypoint_tasks"
     tasks_dir.mkdir()

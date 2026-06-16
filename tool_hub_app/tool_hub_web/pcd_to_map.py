@@ -102,6 +102,19 @@ def parse_pcd_file(path):
 
 
 def convert_pcd_to_map(pcd_path, options):
+    return _convert_pcd_to_map(pcd_path, options, skip_radius_filter=False)
+
+
+def convert_pcd_to_map_preview(pcd_path, options, fast_preview=False, max_preview_dimension=1600):
+    return _convert_pcd_to_map(
+        pcd_path,
+        options,
+        skip_radius_filter=bool(fast_preview),
+        max_dimension=max_preview_dimension if fast_preview else None,
+    )
+
+
+def _convert_pcd_to_map(pcd_path, options, skip_radius_filter=False, max_dimension=None):
     _validate_options(options)
     points = parse_pcd_file(pcd_path)
     transformed = [_apply_inverse_transform(point, options.odom_to_lidar_odom) for point in points]
@@ -109,11 +122,37 @@ def convert_pcd_to_map(pcd_path, options):
     if not sliced:
         raise ValueError("Point cloud is empty after PassThrough filtering")
 
-    filtered = _radius_outlier_filter(sliced, options.radius, options.min_neighbors)
+    filtered = sliced if skip_radius_filter else _radius_outlier_filter(sliced, options.radius, options.min_neighbors)
     if not filtered:
         raise ValueError("Point cloud is empty after RadiusOutlier filtering")
 
-    return _build_map(filtered, options)
+    return _build_map(filtered, _options_for_preview_dimension(filtered, options, max_dimension))
+
+
+def _options_for_preview_dimension(points, options, max_dimension):
+    if not max_dimension or max_dimension <= 0:
+        return options
+
+    x_values = [point[0] for point in points]
+    y_values = [point[1] for point in points]
+    span_x = max(x_values) - min(x_values)
+    span_y = max(y_values) - min(y_values)
+    width = max(int(math.ceil(span_x / options.resolution)), 1)
+    height = max(int(math.ceil(span_y / options.resolution)), 1)
+    current_max = max(width, height)
+    if current_max <= max_dimension:
+        return options
+
+    scale = int(math.ceil(current_max / max_dimension))
+    return PcdToMapOptions(
+        z_min=options.z_min,
+        z_max=options.z_max,
+        resolution=options.resolution * scale,
+        radius=options.radius,
+        min_neighbors=options.min_neighbors,
+        flag_pass_through=options.flag_pass_through,
+        odom_to_lidar_odom=options.odom_to_lidar_odom,
+    )
 
 
 def export_map_files(

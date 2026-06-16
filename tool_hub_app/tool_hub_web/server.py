@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
+import copy
 import sys
+import threading
+import uuid
 from pathlib import Path
 
 import yaml
@@ -39,6 +42,7 @@ try:
     from tool_hub_web.pcd_to_map import (
         PcdToMapOptions,
         convert_pcd_to_map,
+        convert_pcd_to_map_preview,
         export_map_files,
         find_trajectory_pcd,
         project_trajectory_to_map,
@@ -71,6 +75,7 @@ except ModuleNotFoundError:
     from tool_hub_web.pcd_to_map import (
         PcdToMapOptions,
         convert_pcd_to_map,
+        convert_pcd_to_map_preview,
         export_map_files,
         find_trajectory_pcd,
         project_trajectory_to_map,
@@ -107,12 +112,71 @@ def create_app(config=None):
         "TASK_ATTRIBUTE_BATCH_GENERATOR_ROOT",
         str(DEFAULT_TASK_ATTRIBUTE_BATCH_GENERATOR_ROOT),
     )
+    pcd_jobs = {}
+    pcd_jobs_lock = threading.Lock()
 
     def waypoint_tasks_root():
         return Path(app.config["WAYPOINT_TASKS_ROOT"]).expanduser().resolve()
 
     def json_error(message, status_code=400):
         return jsonify({"error": message}), status_code
+
+    def create_pcd_job(kind, payload):
+        job_id = uuid.uuid4().hex
+        job = {
+            "id": job_id,
+            "kind": kind,
+            "status": "queued",
+            "progress": 0,
+            "message": "等待处理",
+            "result": None,
+            "error": None,
+        }
+        with pcd_jobs_lock:
+            pcd_jobs[job_id] = job
+
+        thread = threading.Thread(
+            target=run_pcd_job,
+            args=(job_id, kind, copy.deepcopy(payload)),
+            daemon=True,
+        )
+        thread.start()
+        return job
+
+    def update_pcd_job(job_id, **updates):
+        with pcd_jobs_lock:
+            if job_id in pcd_jobs:
+                pcd_jobs[job_id].update(updates)
+
+    def get_pcd_job(job_id):
+        with pcd_jobs_lock:
+            job = pcd_jobs.get(job_id)
+            return copy.deepcopy(job) if job else None
+
+    def run_pcd_job(job_id, kind, payload):
+        try:
+            update_pcd_job(job_id, status="running", progress=5, message="解析参数")
+            if kind == "preview":
+                result = build_pcd_preview_payload(payload, job_id)
+            elif kind == "export":
+                result = build_pcd_export_payload(payload, job_id)
+            else:
+                raise ValueError(f"Unsupported PCD job kind: {kind}")
+            update_pcd_job(
+                job_id,
+                status="completed",
+                progress=100,
+                message="处理完成",
+                result=result,
+            )
+        except (ValueError, TypeError, KeyError) as exc:
+            update_pcd_job(
+                job_id,
+                status="failed",
+                progress=100,
+                message="处理失败",
+                error=str(exc),
+            )
 
     def resolve_user_path(raw_path, field_name):
         if not raw_path:
@@ -150,6 +214,79 @@ def create_app(config=None):
             "parent": str(target.parent),
             "entries": entries,
         }
+
+    def build_pcd_preview_payload(payload, job_id=None):
+        pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+        slices = payload.get("slices") or []
+        if not slices:
+            raise ValueError("slices is required")
+
+        trajectory_path = find_trajectory_pcd(pcd_path)
+        trajectory_result = None
+        previews = []
+        total = max(len(slices), 1)
+        for index, slice_payload in enumerate(slices):
+            update_pcd_job(
+                job_id,
+                progress=10 + int(index * 80 / total),
+                message=f"生成切片 {index + 1}/{total}",
+            ) if job_id else None
+            result = convert_pcd_to_map_preview(
+                pcd_path,
+                pcd_options_from_payload(payload, slice_payload),
+                fast_preview=bool(payload.get("fast_preview")),
+            )
+            preview_dict = result.to_preview_dict(slice_payload.get("id", f"slice-{index + 1}"))
+            if trajectory_path and payload.get("include_trajectory_preview"):
+                trajectory_result = project_trajectory_to_map(
+                    trajectory_path,
+                    result,
+                    payload.get("odom_to_lidar_odom"),
+                )
+                preview_dict["preview_png_base64"] = render_preview_with_trajectory(
+                    result,
+                    trajectory_result,
+                )
+                preview_dict["trajectory"] = trajectory_result.to_preview_dict()
+            previews.append(preview_dict)
+
+        response_payload = {"slices": previews}
+        if trajectory_path and payload.get("include_trajectory_preview"):
+            response_payload["trajectory"] = (
+                trajectory_result.to_preview_dict() if trajectory_result else None
+            )
+        return response_payload
+
+    def build_pcd_export_payload(payload, job_id=None):
+        update_pcd_job(job_id, progress=10, message="生成完整地图") if job_id else None
+        pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+        output_dir = resolve_user_path(payload.get("output_dir", ""), "output_dir")
+        slice_payload = payload.get("slice") or {}
+        result = convert_pcd_to_map(pcd_path, pcd_options_from_payload(payload, slice_payload))
+        trajectory_path = find_trajectory_pcd(pcd_path)
+        trajectory_mask = None
+        if trajectory_path and (
+            payload.get("include_trajectory_export")
+            or payload.get("include_trajectory_overlay")
+        ):
+            update_pcd_job(job_id, progress=75, message="投影轨迹蒙版") if job_id else None
+            trajectory_mask = project_trajectory_to_map(
+                trajectory_path,
+                result,
+                payload.get("odom_to_lidar_odom"),
+            )
+        update_pcd_job(job_id, progress=88, message="写出地图文件") if job_id else None
+        exported = export_map_files(
+            result,
+            output_dir,
+            payload.get("map_name", "map"),
+            trajectory_mask=trajectory_mask,
+            include_trajectory_overlay=bool(payload.get("include_trajectory_overlay")),
+        )
+        response_payload = {"ok": True, **exported, "map": result.to_preview_dict()}
+        if trajectory_mask is not None:
+            response_payload["trajectory"] = trajectory_mask.to_preview_dict()
+        return response_payload
 
     def parse_optional_int(value):
         if value in (None, ""):
@@ -248,69 +385,43 @@ def create_app(config=None):
     def pcd_to_map_preview():
         payload = request.get_json(silent=True) or {}
         try:
-            pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
-            slices = payload.get("slices") or []
-            if not slices:
-                return json_error("slices is required", 400)
-            trajectory_path = find_trajectory_pcd(pcd_path)
-            trajectory_result = None
-            previews = []
-            for index, slice_payload in enumerate(slices):
-                result = convert_pcd_to_map(pcd_path, pcd_options_from_payload(payload, slice_payload))
-                preview_dict = result.to_preview_dict(slice_payload.get("id", f"slice-{index + 1}"))
-                if trajectory_path and payload.get("include_trajectory_preview"):
-                    trajectory_result = project_trajectory_to_map(
-                        trajectory_path,
-                        result,
-                        payload.get("odom_to_lidar_odom"),
-                    )
-                    preview_dict["preview_png_base64"] = render_preview_with_trajectory(
-                        result,
-                        trajectory_result,
-                    )
-                    preview_dict["trajectory"] = trajectory_result.to_preview_dict()
-                previews.append(preview_dict)
-            response_payload = {"slices": previews}
-            if trajectory_path and payload.get("include_trajectory_preview"):
-                response_payload["trajectory"] = (
-                    trajectory_result.to_preview_dict() if trajectory_result else None
-                )
+            response_payload = build_pcd_preview_payload(payload)
         except (ValueError, TypeError, KeyError) as exc:
             return json_error(str(exc), 400)
         return jsonify(response_payload)
+
+    @app.post("/pcd-to-map/api/preview_job")
+    def pcd_to_map_preview_job():
+        job = create_pcd_job("preview", request.get_json(silent=True) or {})
+        return jsonify({"job_id": job["id"], "status": job["status"], "progress": job["progress"]}), 202
+
+    @app.get("/pcd-to-map/api/preview_job/<job_id>")
+    def pcd_to_map_preview_job_status(job_id):
+        job = get_pcd_job(job_id)
+        if not job:
+            return json_error("job not found", 404)
+        return jsonify(job)
 
     @app.post("/pcd-to-map/api/export")
     def pcd_to_map_export():
         payload = request.get_json(silent=True) or {}
         try:
-            pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
-            output_dir = resolve_user_path(payload.get("output_dir", ""), "output_dir")
-            slice_payload = payload.get("slice") or {}
-            result = convert_pcd_to_map(pcd_path, pcd_options_from_payload(payload, slice_payload))
-            trajectory_path = find_trajectory_pcd(pcd_path)
-            trajectory_mask = None
-            if trajectory_path and (
-                payload.get("include_trajectory_export")
-                or payload.get("include_trajectory_overlay")
-            ):
-                trajectory_mask = project_trajectory_to_map(
-                    trajectory_path,
-                    result,
-                    payload.get("odom_to_lidar_odom"),
-                )
-            exported = export_map_files(
-                result,
-                output_dir,
-                payload.get("map_name", "map"),
-                trajectory_mask=trajectory_mask,
-                include_trajectory_overlay=bool(payload.get("include_trajectory_overlay")),
-            )
+            response_payload = build_pcd_export_payload(payload)
         except (ValueError, TypeError, KeyError) as exc:
             return json_error(str(exc), 400)
-        response_payload = {"ok": True, **exported, "map": result.to_preview_dict()}
-        if trajectory_mask is not None:
-            response_payload["trajectory"] = trajectory_mask.to_preview_dict()
         return jsonify(response_payload)
+
+    @app.post("/pcd-to-map/api/export_job")
+    def pcd_to_map_export_job():
+        job = create_pcd_job("export", request.get_json(silent=True) or {})
+        return jsonify({"job_id": job["id"], "status": job["status"], "progress": job["progress"]}), 202
+
+    @app.get("/pcd-to-map/api/export_job/<job_id>")
+    def pcd_to_map_export_job_status(job_id):
+        job = get_pcd_job(job_id)
+        if not job:
+            return json_error("job not found", 404)
+        return jsonify(job)
 
     @app.post("/virtual-wall-builder/api/browse")
     def virtual_wall_builder_browse():

@@ -115,6 +115,19 @@
         font-size: 0.84rem;
         word-break: break-all;
       }
+      .pcd-progress {
+        display: grid;
+        grid-template-columns: minmax(160px, 1fr) auto;
+        gap: 0.5rem;
+        align-items: center;
+        color: #8ca4b8;
+        font-size: 0.88rem;
+      }
+      .pcd-progress progress {
+        width: 100%;
+        height: 0.85rem;
+        accent-color: #4db0e8;
+      }
       .picker-overlay {
         display: none;
         position: fixed;
@@ -308,12 +321,20 @@
           <input id="include-trajectory-preview" type="checkbox" checked>
         </label>
         <label>
+          <span>快速预览</span>
+          <input id="fast-preview" type="checkbox" checked>
+        </label>
+        <label>
           <span>导出轨迹叠加图</span>
           <input id="include-trajectory-overlay" type="checkbox">
         </label>
       </section>
 
       <p id="pcd-status" class="hub-flow" data-error="false">准备就绪</p>
+      <div class="pcd-progress">
+        <progress id="pcd-progress-bar" max="100" value="0"></progress>
+        <span id="pcd-progress-text">0%</span>
+      </div>
 
       <section class="pcd-layout">
         <article class="pcd-panel">
