@@ -46,7 +46,8 @@
       }
       .pcd-actions button,
       .picker-header button,
-      .slice-row button {
+      .slice-row button,
+      .viewer-toolbar button {
         padding: 0.62rem 0.8rem;
         border-radius: 10px;
         border: 1px solid #314456;
@@ -92,6 +93,21 @@
         border-radius: 12px;
         background: #05080c;
         image-rendering: pixelated;
+      }
+      .preview-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+      }
+      .preview-card-header button {
+        padding: 0.44rem 0.65rem;
+        border-radius: 9px;
+        border: 1px solid #314456;
+        background: #183349;
+        color: #d6deeb;
+        font: inherit;
+        cursor: pointer;
       }
       .pcd-muted,
       .preview-meta {
@@ -152,6 +168,57 @@
       .picker-entry[data-clickable="true"]:hover {
         border-color: #4db0e8;
       }
+      .viewer-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: rgba(5, 8, 12, 0.84);
+        grid-template-rows: auto 1fr;
+      }
+      .viewer-overlay.visible {
+        display: grid;
+      }
+      .viewer-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.85rem 1rem;
+        border-bottom: 1px solid #22303c;
+        background: #0f151d;
+      }
+      .viewer-title {
+        flex: 1;
+        min-width: 220px;
+        color: #d6deeb;
+        word-break: break-all;
+      }
+      .viewer-scale {
+        color: #8ca4b8;
+        font-size: 0.88rem;
+      }
+      .viewer-frame {
+        position: relative;
+        overflow: hidden;
+        background: #05080c;
+        cursor: grab;
+        touch-action: none;
+      }
+      .viewer-frame.dragging {
+        cursor: grabbing;
+      }
+      .viewer-image {
+        position: absolute;
+        top: 0;
+        left: 0;
+        max-width: none;
+        max-height: none;
+        image-rendering: pixelated;
+        user-select: none;
+        -webkit-user-drag: none;
+        transform-origin: 0 0;
+      }
       @media (max-width: 1180px) {
         .pcd-grid,
         .pcd-layout {
@@ -171,6 +238,20 @@
           <button type="button" id="picker-close">关闭</button>
         </div>
         <div id="picker-list" class="picker-list"></div>
+      </div>
+    </div>
+
+    <div id="viewer-overlay" class="viewer-overlay">
+      <div class="viewer-toolbar">
+        <strong id="viewer-title" class="viewer-title"></strong>
+        <span id="viewer-scale" class="viewer-scale">100%</span>
+        <button type="button" id="viewer-zoom-out">缩小</button>
+        <button type="button" id="viewer-zoom-in">放大</button>
+        <button type="button" id="viewer-reset">重置</button>
+        <button type="button" id="viewer-close">关闭</button>
+      </div>
+      <div id="viewer-frame" class="viewer-frame">
+        <img id="viewer-image" class="viewer-image" alt="slice preview detail">
       </div>
     </div>
 
@@ -246,6 +327,6 @@
         </article>
       </section>
     </main>
-    <script src="/hub-static/pcd-to-map.js"></script>
+    <script type="module" src="/hub-static/pcd-to-map.js"></script>
   </body>
 </html>

@@ -1,3 +1,11 @@
+import {
+  createViewerState,
+  fitViewerToFrame,
+  panViewer,
+  resetViewer,
+  zoomViewerAtPoint,
+} from "./pcd-to-map-viewer-state.js";
+
 const state = {
   defaultRoot: "/",
   browseCwd: "/",
@@ -5,6 +13,10 @@ const state = {
   slices: [],
   previews: [],
   selectedSliceId: "",
+  viewer: {
+    preview: null,
+    state: createViewerState(),
+  },
 };
 
 const el = {
@@ -31,6 +43,15 @@ const el = {
   pickerSelectDir: document.querySelector("#picker-select-dir"),
   pickerUp: document.querySelector("#picker-up"),
   pickerClose: document.querySelector("#picker-close"),
+  viewerOverlay: document.querySelector("#viewer-overlay"),
+  viewerTitle: document.querySelector("#viewer-title"),
+  viewerScale: document.querySelector("#viewer-scale"),
+  viewerFrame: document.querySelector("#viewer-frame"),
+  viewerImage: document.querySelector("#viewer-image"),
+  viewerZoomIn: document.querySelector("#viewer-zoom-in"),
+  viewerZoomOut: document.querySelector("#viewer-zoom-out"),
+  viewerReset: document.querySelector("#viewer-reset"),
+  viewerClose: document.querySelector("#viewer-close"),
 };
 
 function setStatus(message, error = false) {
@@ -119,7 +140,10 @@ function renderPreviews() {
     card.className = "preview-card";
     card.dataset.selected = preview.id === state.selectedSliceId ? "true" : "false";
     card.innerHTML = `
-      <strong>${preview.id}: Z [${preview.z_min}, ${preview.z_max}]</strong>
+      <div class="preview-card-header">
+        <strong>${preview.id}: Z [${preview.z_min}, ${preview.z_max}]</strong>
+        <button type="button" data-view-preview="${preview.id}">查看大图</button>
+      </div>
       <img alt="slice preview" src="data:image/png;base64,${preview.preview_png_base64}">
       <div class="preview-meta">
         points=${preview.point_count}, size=${preview.width}x${preview.height},
@@ -131,8 +155,70 @@ function renderPreviews() {
       renderPreviews();
       setStatus(`已选择 ${preview.id}`);
     });
+    card.querySelector("[data-view-preview]").addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.selectedSliceId = preview.id;
+      renderPreviews();
+      openViewer(preview);
+      setStatus(`已选择 ${preview.id}`);
+    });
     el.previewList.appendChild(card);
   });
+}
+
+function applyViewerTransform() {
+  const viewerState = state.viewer.state;
+  el.viewerImage.style.transform = `translate(${viewerState.offsetX}px, ${viewerState.offsetY}px) scale(${viewerState.scale})`;
+  el.viewerScale.textContent = `${Math.round(viewerState.scale * 100)}%`;
+  el.viewerFrame.classList.toggle("dragging", viewerState.isDragging);
+}
+
+function fitViewer() {
+  const preview = state.viewer.preview;
+  if (!preview) {
+    return;
+  }
+  state.viewer.state = fitViewerToFrame(
+    state.viewer.state,
+    el.viewerFrame.clientWidth,
+    el.viewerFrame.clientHeight,
+    preview.width,
+    preview.height,
+  );
+  applyViewerTransform();
+}
+
+function openViewer(preview) {
+  state.viewer.preview = preview;
+  state.viewer.state = resetViewer();
+  el.viewerTitle.textContent = `${preview.id}: Z [${preview.z_min}, ${preview.z_max}]`;
+  el.viewerImage.src = `data:image/png;base64,${preview.preview_png_base64}`;
+  el.viewerImage.width = preview.width;
+  el.viewerImage.height = preview.height;
+  el.viewerOverlay.classList.add("visible");
+  window.requestAnimationFrame(fitViewer);
+}
+
+function closeViewer() {
+  state.viewer.preview = null;
+  state.viewer.state = resetViewer();
+  el.viewerOverlay.classList.remove("visible");
+  el.viewerImage.removeAttribute("src");
+  applyViewerTransform();
+}
+
+function zoomViewer(multiplier, point = null) {
+  const frameRect = el.viewerFrame.getBoundingClientRect();
+  const zoomPoint = point || {
+    x: frameRect.width / 2,
+    y: frameRect.height / 2,
+  };
+  state.viewer.state = zoomViewerAtPoint(
+    state.viewer.state,
+    state.viewer.state.scale * multiplier,
+    zoomPoint,
+  );
+  applyViewerTransform();
 }
 
 async function browse(path = state.browseCwd) {
@@ -244,6 +330,83 @@ el.pickerUp.addEventListener("click", () => {
 el.pickerSelectDir.addEventListener("click", () => {
   el.outputDir.value = state.browseCwd;
   closePicker();
+});
+el.viewerClose.addEventListener("click", closeViewer);
+el.viewerReset.addEventListener("click", fitViewer);
+el.viewerZoomIn.addEventListener("click", () => zoomViewer(1.25));
+el.viewerZoomOut.addEventListener("click", () => zoomViewer(0.8));
+el.viewerFrame.addEventListener("wheel", (event) => {
+  if (!state.viewer.preview) {
+    return;
+  }
+  event.preventDefault();
+  const rect = el.viewerFrame.getBoundingClientRect();
+  zoomViewer(event.deltaY < 0 ? 1.18 : 0.85, {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  });
+}, {passive: false});
+el.viewerFrame.addEventListener("pointerdown", (event) => {
+  if (!state.viewer.preview) {
+    return;
+  }
+  el.viewerFrame.setPointerCapture(event.pointerId);
+  state.viewer.state = {
+    ...state.viewer.state,
+    isDragging: true,
+    dragStartX: event.clientX,
+    dragStartY: event.clientY,
+    dragOriginX: state.viewer.state.offsetX,
+    dragOriginY: state.viewer.state.offsetY,
+  };
+  applyViewerTransform();
+});
+el.viewerFrame.addEventListener("pointermove", (event) => {
+  if (!state.viewer.state.isDragging) {
+    return;
+  }
+  state.viewer.state = {
+    ...panViewer(
+      {
+        ...state.viewer.state,
+        offsetX: state.viewer.state.dragOriginX,
+        offsetY: state.viewer.state.dragOriginY,
+      },
+      {
+        dx: event.clientX - state.viewer.state.dragStartX,
+        dy: event.clientY - state.viewer.state.dragStartY,
+      },
+    ),
+    isDragging: true,
+  };
+  applyViewerTransform();
+});
+el.viewerFrame.addEventListener("pointerup", (event) => {
+  if (el.viewerFrame.hasPointerCapture(event.pointerId)) {
+    el.viewerFrame.releasePointerCapture(event.pointerId);
+  }
+  state.viewer.state = {
+    ...state.viewer.state,
+    isDragging: false,
+  };
+  applyViewerTransform();
+});
+el.viewerFrame.addEventListener("pointercancel", () => {
+  state.viewer.state = {
+    ...state.viewer.state,
+    isDragging: false,
+  };
+  applyViewerTransform();
+});
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.viewer.preview) {
+    closeViewer();
+  }
+});
+window.addEventListener("resize", () => {
+  if (state.viewer.preview) {
+    fitViewer();
+  }
 });
 
 init().catch((error) => setStatus(error.message, true));
