@@ -303,6 +303,14 @@
           <span>odom_to_lidar_odom: x,y,z,roll,pitch,yaw</span>
           <input id="transform" type="text" value="0,0,0,0,0,0">
         </label>
+        <label>
+          <span>自动轨迹蒙版</span>
+          <input id="include-trajectory-preview" type="checkbox" checked>
+        </label>
+        <label>
+          <span>导出轨迹叠加图</span>
+          <input id="include-trajectory-overlay" type="checkbox">
+        </label>
       </section>
 
       <p id="pcd-status" class="hub-flow" data-error="false">准备就绪</p>

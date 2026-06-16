@@ -57,6 +57,25 @@ class PcdMapResult:
         return data
 
 
+@dataclass(frozen=True)
+class TrajectoryMaskResult:
+    width: int
+    height: int
+    resolution: float
+    origin: list[float]
+    mask: list[int]
+    point_count: int
+    in_bounds_count: int
+    source_path: str
+
+    def to_preview_dict(self):
+        return {
+            "source_path": self.source_path,
+            "point_count": self.point_count,
+            "in_bounds_count": self.in_bounds_count,
+        }
+
+
 def parse_pcd_file(path):
     source = Path(path).expanduser().resolve()
     if not source.is_file():
@@ -97,7 +116,13 @@ def convert_pcd_to_map(pcd_path, options):
     return _build_map(filtered, options)
 
 
-def export_map_files(result, output_dir, map_name):
+def export_map_files(
+    result,
+    output_dir,
+    map_name,
+    trajectory_mask=None,
+    include_trajectory_overlay=False,
+):
     name = _safe_map_name(map_name)
     target_dir = Path(output_dir).expanduser().resolve()
     if not target_dir.is_absolute():
@@ -109,7 +134,90 @@ def export_map_files(result, output_dir, map_name):
     pgm_path.write_bytes(_render_pgm(result))
 
     yaml_path.write_text(_render_map_yaml(pgm_path.name, result), encoding="utf-8")
-    return {"pgm_path": str(pgm_path), "yaml_path": str(yaml_path)}
+    exported = {"pgm_path": str(pgm_path), "yaml_path": str(yaml_path)}
+
+    if trajectory_mask:
+        trajectory_pgm_path = target_dir / f"{name}_trajectory.pgm"
+        trajectory_yaml_path = target_dir / f"{name}_trajectory.yaml"
+        trajectory_pgm_path.write_bytes(_render_mask_pgm(trajectory_mask))
+        trajectory_yaml_path.write_text(
+            _render_map_yaml(trajectory_pgm_path.name, result), encoding="utf-8"
+        )
+        exported.update(
+            {
+                "trajectory_pgm_path": str(trajectory_pgm_path),
+                "trajectory_yaml_path": str(trajectory_yaml_path),
+            }
+        )
+
+        if include_trajectory_overlay:
+            overlay_result = _result_with_trajectory_overlay(result, trajectory_mask)
+            overlay_pgm_path = target_dir / f"{name}_with_trajectory.pgm"
+            overlay_yaml_path = target_dir / f"{name}_with_trajectory.yaml"
+            overlay_pgm_path.write_bytes(_render_pgm(overlay_result))
+            overlay_yaml_path.write_text(
+                _render_map_yaml(overlay_pgm_path.name, overlay_result), encoding="utf-8"
+            )
+            exported.update(
+                {
+                    "overlay_pgm_path": str(overlay_pgm_path),
+                    "overlay_yaml_path": str(overlay_yaml_path),
+                }
+            )
+
+    return exported
+
+
+def render_preview_with_trajectory(result, trajectory_mask):
+    occupancy = list(result.occupancy)
+    return _png_base64_from_occupancy_with_trajectory(
+        result.width,
+        result.height,
+        occupancy,
+        trajectory_mask.mask,
+        origin=result.origin,
+        resolution=result.resolution,
+    )
+
+
+def find_trajectory_pcd(map_pcd_path):
+    source = Path(map_pcd_path).expanduser().resolve()
+    candidates = [
+        source.parent / "Trajectory-Opt.pcd",
+        source.parent / "trajectory-opt.pcd",
+        source.parent / "trajectory.pcd",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def project_trajectory_to_map(trajectory_pcd_path, map_result, transform=None):
+    points = parse_pcd_file(trajectory_pcd_path)
+    if transform is not None:
+        points = [_apply_inverse_transform(point, transform) for point in points]
+    mask = [0] * (map_result.width * map_result.height)
+    in_bounds_count = 0
+    origin_x, origin_y = map_result.origin[0], map_result.origin[1]
+
+    for point in points:
+        i = int(math.floor((point[0] - origin_x) / map_result.resolution))
+        j = int(math.floor((point[1] - origin_y) / map_result.resolution))
+        if 0 <= i < map_result.width and 0 <= j < map_result.height:
+            mask[i + j * map_result.width] = 100
+            in_bounds_count += 1
+
+    return TrajectoryMaskResult(
+        width=map_result.width,
+        height=map_result.height,
+        resolution=map_result.resolution,
+        origin=map_result.origin,
+        mask=mask,
+        point_count=len(points),
+        in_bounds_count=in_bounds_count,
+        source_path=str(Path(trajectory_pcd_path).expanduser().resolve()),
+    )
 
 
 def _find_data_line_end(raw):
@@ -474,6 +582,34 @@ def _png_base64_from_occupancy(width, height, occupancy, origin, resolution):
     return base64.b64encode(png).decode("ascii")
 
 
+def _png_base64_from_occupancy_with_trajectory(width, height, occupancy, trajectory_mask, origin, resolution):
+    raw = bytearray()
+    origin_x, origin_y = _preview_map_tf_pixel(width, height, origin, resolution)
+    axis_length = max(4, min(width, height, 48) // 4)
+    x_axis_end = min(width - 1, origin_x + axis_length)
+    y_axis_end = max(0, origin_y - axis_length)
+
+    for row in reversed(range(height)):
+        raw.append(0)
+        preview_y = height - 1 - row
+        for column in range(width):
+            index = column + row * width
+            value = occupancy[index]
+            if trajectory_mask[index] >= 100:
+                pixel = (255, 64, 64)
+            else:
+                pixel = (0, 0, 0) if value >= 100 else (254, 254, 254)
+            if column == origin_x and preview_y == origin_y:
+                pixel = (255, 230, 96)
+            elif preview_y == origin_y and origin_x <= column <= x_axis_end:
+                pixel = (220, 40, 40) if trajectory_mask[index] < 100 else (255, 64, 64)
+            elif column == origin_x and y_axis_end <= preview_y <= origin_y:
+                pixel = (40, 180, 80)
+            raw.extend(pixel)
+    png = _make_png(width, height, bytes(raw))
+    return base64.b64encode(png).decode("ascii")
+
+
 def _preview_map_tf_pixel(width, height, origin, resolution):
     origin_x = float(origin[0])
     origin_y = float(origin[1])
@@ -494,6 +630,40 @@ def _render_pgm(result):
             value = result.occupancy[column + row * result.width]
             body.append(0 if value >= 100 else 254)
     return header + bytes(body)
+
+
+def _render_mask_pgm(mask_result):
+    header = f"P5\n{mask_result.width} {mask_result.height}\n255\n".encode("ascii")
+    body = bytearray()
+    for row in reversed(range(mask_result.height)):
+        for column in range(mask_result.width):
+            value = mask_result.mask[column + row * mask_result.width]
+            body.append(0 if value >= 100 else 254)
+    return header + bytes(body)
+
+
+def _result_with_trajectory_overlay(result, trajectory_mask):
+    occupancy = list(result.occupancy)
+    for index, value in enumerate(trajectory_mask.mask):
+        if value >= 100:
+            occupancy[index] = 100
+    return PcdMapResult(
+        width=result.width,
+        height=result.height,
+        resolution=result.resolution,
+        origin=result.origin,
+        occupancy=occupancy,
+        point_count=result.point_count,
+        z_min=result.z_min,
+        z_max=result.z_max,
+        preview_png_base64=_png_base64_from_occupancy(
+            result.width,
+            result.height,
+            occupancy,
+            origin=result.origin,
+            resolution=result.resolution,
+        ),
+    )
 
 
 def _render_map_yaml(image_name, result):

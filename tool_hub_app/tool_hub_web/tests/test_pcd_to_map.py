@@ -9,7 +9,10 @@ from tool_hub_web.pcd_to_map import (
     PcdToMapOptions,
     convert_pcd_to_map,
     export_map_files,
+    find_trajectory_pcd,
     parse_pcd_file,
+    project_trajectory_to_map,
+    render_preview_with_trajectory,
 )
 
 
@@ -236,6 +239,95 @@ def test_export_map_files_writes_pgm_and_yaml(tmp_path):
     assert "image: demo_map.pgm" in yaml_text
     assert "resolution: 0.05" in yaml_text
     assert "origin: [1.0, 2.0, 0.0]" in yaml_text
+
+
+def test_find_trajectory_pcd_prefers_same_directory_trajectory_opt(tmp_path):
+    map_path = tmp_path / "map_1.pcd"
+    trajectory_path = tmp_path / "Trajectory-Opt.pcd"
+    write_ascii_pcd(map_path, [(0.0, 0.0, 0.0)])
+    write_ascii_pcd(trajectory_path, [(0.5, 0.5, 0.0)])
+
+    assert find_trajectory_pcd(map_path) == trajectory_path
+
+
+def test_project_trajectory_to_map_uses_map_grid_geometry(tmp_path):
+    map_path = tmp_path / "map_1.pcd"
+    trajectory_path = tmp_path / "Trajectory-Opt.pcd"
+    write_ascii_pcd(map_path, [(-1.0, -1.0, 0.2), (1.0, 1.0, 0.2)])
+    write_ascii_pcd(
+        trajectory_path,
+        [
+            (-1.0, -1.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (0.5, 0.5, 0.0),
+            (2.0, 2.0, 0.0),
+        ],
+    )
+    result = convert_pcd_to_map(
+        map_path,
+        PcdToMapOptions(z_min=0.0, z_max=0.5, resolution=0.5, radius=0.0, min_neighbors=0),
+    )
+
+    mask = project_trajectory_to_map(trajectory_path, result)
+
+    assert mask.point_count == 4
+    assert mask.in_bounds_count == 3
+    assert mask.mask == [
+        100, 0, 0, 0,
+        0, 0, 0, 0,
+        0, 0, 100, 0,
+        0, 0, 0, 100,
+    ]
+
+
+def test_export_map_files_writes_trajectory_mask_and_overlay(tmp_path):
+    pcd_path = tmp_path / "map_1.pcd"
+    trajectory_path = tmp_path / "Trajectory-Opt.pcd"
+    output_dir = tmp_path / "maps"
+    write_ascii_pcd(pcd_path, [(-1.0, -1.0, 0.2), (1.0, 1.0, 0.2)])
+    write_ascii_pcd(trajectory_path, [(0.0, 0.0, 0.0)])
+    result = convert_pcd_to_map(
+        pcd_path,
+        PcdToMapOptions(z_min=0.0, z_max=0.5, resolution=0.5, radius=0.0, min_neighbors=0),
+    )
+    mask = project_trajectory_to_map(trajectory_path, result)
+
+    exported = export_map_files(
+        result,
+        output_dir,
+        "demo_map",
+        trajectory_mask=mask,
+        include_trajectory_overlay=True,
+    )
+
+    assert exported["trajectory_pgm_path"] == str(output_dir / "demo_map_trajectory.pgm")
+    assert exported["trajectory_yaml_path"] == str(output_dir / "demo_map_trajectory.yaml")
+    assert exported["overlay_pgm_path"] == str(output_dir / "demo_map_with_trajectory.pgm")
+    assert exported["overlay_yaml_path"] == str(output_dir / "demo_map_with_trajectory.yaml")
+    assert (output_dir / "demo_map_trajectory.pgm").is_file()
+    assert (output_dir / "demo_map_trajectory.yaml").read_text(encoding="utf-8").startswith(
+        "image: demo_map_trajectory.pgm"
+    )
+    assert (output_dir / "demo_map_with_trajectory.pgm").is_file()
+    assert (output_dir / "demo_map_with_trajectory.yaml").read_text(encoding="utf-8").startswith(
+        "image: demo_map_with_trajectory.pgm"
+    )
+
+
+def test_render_preview_with_trajectory_draws_red_mask_pixels(tmp_path):
+    map_path = tmp_path / "map_1.pcd"
+    trajectory_path = tmp_path / "Trajectory-Opt.pcd"
+    write_ascii_pcd(map_path, [(-1.0, -1.0, 0.2), (1.0, 1.0, 0.2)])
+    write_ascii_pcd(trajectory_path, [(0.5, 0.5, 0.0)])
+    result = convert_pcd_to_map(
+        map_path,
+        PcdToMapOptions(z_min=0.0, z_max=0.5, resolution=0.5, radius=0.0, min_neighbors=0),
+    )
+    mask = project_trajectory_to_map(trajectory_path, result)
+
+    rows = decode_preview_png_rgb_rows(render_preview_with_trajectory(result, mask))
+
+    assert (255, 64, 64) in flatten_pixels(rows)
 
 
 def test_preview_png_draws_yaml_origin_axes(tmp_path):

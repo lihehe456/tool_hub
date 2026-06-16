@@ -234,6 +234,53 @@ def test_pcd_to_map_preview_and_export_apis(client, tmp_path):
     assert (output_dir / "selected_map.yaml").is_file()
 
 
+def test_pcd_to_map_preview_and_export_include_same_directory_trajectory(client, tmp_path):
+    pcd_path = tmp_path / "map_1.pcd"
+    trajectory_path = tmp_path / "Trajectory-Opt.pcd"
+    output_dir = tmp_path / "maps"
+    write_ascii_pcd(pcd_path, [(-1.0, -1.0, 0.2), (1.0, 1.0, 0.2)])
+    write_ascii_pcd(trajectory_path, [(0.0, 0.0, 0.0), (0.5, 0.5, 0.0)])
+
+    preview_response = client.post(
+        "/pcd-to-map/api/preview",
+        json={
+            "pcd_path": str(pcd_path),
+            "resolution": 0.5,
+            "radius": 0.0,
+            "min_neighbors": 0,
+            "include_trajectory_preview": True,
+            "slices": [{"id": "all", "z_min": 0.0, "z_max": 0.5}],
+        },
+    )
+    preview_payload = preview_response.get_json()
+
+    export_response = client.post(
+        "/pcd-to-map/api/export",
+        json={
+            "pcd_path": str(pcd_path),
+            "output_dir": str(output_dir),
+            "map_name": "selected_map",
+            "resolution": 0.5,
+            "radius": 0.0,
+            "min_neighbors": 0,
+            "include_trajectory_export": True,
+            "include_trajectory_overlay": True,
+            "slice": {"z_min": 0.0, "z_max": 0.5},
+        },
+    )
+    export_payload = export_response.get_json()
+
+    assert preview_response.status_code == 200
+    assert preview_payload["trajectory"]["source_path"] == str(trajectory_path)
+    assert preview_payload["slices"][0]["trajectory"]["in_bounds_count"] == 2
+    assert export_response.status_code == 200
+    assert (output_dir / "selected_map_trajectory.pgm").is_file()
+    assert (output_dir / "selected_map_trajectory.yaml").is_file()
+    assert (output_dir / "selected_map_with_trajectory.pgm").is_file()
+    assert (output_dir / "selected_map_with_trajectory.yaml").is_file()
+    assert export_payload["trajectory"]["in_bounds_count"] == 2
+
+
 def test_waypoint_task_builder_schema_and_load_save_apis(client, tmp_path):
     tasks_dir = tmp_path / "waypoint_tasks"
     tasks_dir.mkdir()

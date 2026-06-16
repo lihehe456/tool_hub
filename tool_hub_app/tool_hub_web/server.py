@@ -40,6 +40,9 @@ try:
         PcdToMapOptions,
         convert_pcd_to_map,
         export_map_files,
+        find_trajectory_pcd,
+        project_trajectory_to_map,
+        render_preview_with_trajectory,
     )
     from tool_hub_web.waypoint_task_builder import (
         load_waypoint_task_file,
@@ -69,6 +72,9 @@ except ModuleNotFoundError:
         PcdToMapOptions,
         convert_pcd_to_map,
         export_map_files,
+        find_trajectory_pcd,
+        project_trajectory_to_map,
+        render_preview_with_trajectory,
     )
     from tool_hub_web.waypoint_task_builder import (
         load_waypoint_task_file,
@@ -246,13 +252,32 @@ def create_app(config=None):
             slices = payload.get("slices") or []
             if not slices:
                 return json_error("slices is required", 400)
+            trajectory_path = find_trajectory_pcd(pcd_path)
+            trajectory_result = None
             previews = []
             for index, slice_payload in enumerate(slices):
                 result = convert_pcd_to_map(pcd_path, pcd_options_from_payload(payload, slice_payload))
-                previews.append(result.to_preview_dict(slice_payload.get("id", f"slice-{index + 1}")))
+                preview_dict = result.to_preview_dict(slice_payload.get("id", f"slice-{index + 1}"))
+                if trajectory_path and payload.get("include_trajectory_preview"):
+                    trajectory_result = project_trajectory_to_map(
+                        trajectory_path,
+                        result,
+                        payload.get("odom_to_lidar_odom"),
+                    )
+                    preview_dict["preview_png_base64"] = render_preview_with_trajectory(
+                        result,
+                        trajectory_result,
+                    )
+                    preview_dict["trajectory"] = trajectory_result.to_preview_dict()
+                previews.append(preview_dict)
+            response_payload = {"slices": previews}
+            if trajectory_path and payload.get("include_trajectory_preview"):
+                response_payload["trajectory"] = (
+                    trajectory_result.to_preview_dict() if trajectory_result else None
+                )
         except (ValueError, TypeError, KeyError) as exc:
             return json_error(str(exc), 400)
-        return jsonify({"slices": previews})
+        return jsonify(response_payload)
 
     @app.post("/pcd-to-map/api/export")
     def pcd_to_map_export():
@@ -262,10 +287,30 @@ def create_app(config=None):
             output_dir = resolve_user_path(payload.get("output_dir", ""), "output_dir")
             slice_payload = payload.get("slice") or {}
             result = convert_pcd_to_map(pcd_path, pcd_options_from_payload(payload, slice_payload))
-            exported = export_map_files(result, output_dir, payload.get("map_name", "map"))
+            trajectory_path = find_trajectory_pcd(pcd_path)
+            trajectory_mask = None
+            if trajectory_path and (
+                payload.get("include_trajectory_export")
+                or payload.get("include_trajectory_overlay")
+            ):
+                trajectory_mask = project_trajectory_to_map(
+                    trajectory_path,
+                    result,
+                    payload.get("odom_to_lidar_odom"),
+                )
+            exported = export_map_files(
+                result,
+                output_dir,
+                payload.get("map_name", "map"),
+                trajectory_mask=trajectory_mask,
+                include_trajectory_overlay=bool(payload.get("include_trajectory_overlay")),
+            )
         except (ValueError, TypeError, KeyError) as exc:
             return json_error(str(exc), 400)
-        return jsonify({"ok": True, **exported, "map": result.to_preview_dict()})
+        response_payload = {"ok": True, **exported, "map": result.to_preview_dict()}
+        if trajectory_mask is not None:
+            response_payload["trajectory"] = trajectory_mask.to_preview_dict()
+        return jsonify(response_payload)
 
     @app.post("/virtual-wall-builder/api/browse")
     def virtual_wall_builder_browse():

@@ -27,6 +27,8 @@ const el = {
   radius: document.querySelector("#radius"),
   minNeighbors: document.querySelector("#min-neighbors"),
   flagPassThrough: document.querySelector("#flag-pass-through"),
+  includeTrajectoryPreview: document.querySelector("#include-trajectory-preview"),
+  includeTrajectoryOverlay: document.querySelector("#include-trajectory-overlay"),
   transform: document.querySelector("#transform"),
   status: document.querySelector("#pcd-status"),
   sliceList: document.querySelector("#slice-list"),
@@ -148,6 +150,7 @@ function renderPreviews() {
       <div class="preview-meta">
         points=${preview.point_count}, size=${preview.width}x${preview.height},
         resolution=${preview.resolution}, origin=[${preview.origin.join(", ")}]
+        ${preview.trajectory ? `<br>trajectory=${preview.trajectory.in_bounds_count}/${preview.trajectory.point_count}` : ""}
       </div>
     `;
     card.addEventListener("click", () => {
@@ -264,6 +267,7 @@ async function previewSlices() {
       z_min: Number(slice.z_min),
       z_max: Number(slice.z_max),
     })),
+    include_trajectory_preview: el.includeTrajectoryPreview.checked,
   };
   const data = await postJson("/pcd-to-map/api/preview", payload);
   state.previews = data.slices;
@@ -282,8 +286,17 @@ async function exportSelected() {
     output_dir: el.outputDir.value.trim(),
     map_name: el.mapName.value.trim(),
     slice: {z_min: selected.z_min, z_max: selected.z_max},
+    include_trajectory_export: true,
+    include_trajectory_overlay: el.includeTrajectoryOverlay.checked,
   });
-  setStatus(`导出成功: ${data.yaml_path}`);
+  const extras = [];
+  if (data.trajectory_yaml_path) {
+    extras.push("轨迹蒙版");
+  }
+  if (data.overlay_yaml_path) {
+    extras.push("轨迹叠加图");
+  }
+  setStatus(`导出成功: ${data.yaml_path}${extras.length ? `，已生成${extras.join("、")}` : ""}`);
 }
 
 async function withButton(button, pendingText, action) {
