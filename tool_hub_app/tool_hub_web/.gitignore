@@ -1,0 +1,77 @@
+# ============================================================
+# Delivery Vehicle R6S - Root .gitignore
+# ============================================================
+
+# ----- Colcon build artifacts -----
+**/build/
+**/install/
+**/log/
+COLCON_IGNORE
+
+# ----- ROS2 generated files -----
+**/rosidl_generator_*/
+**/rosidl_typesupport_*/
+
+# ----- C/C++ compiled objects -----
+*.o
+*.so
+*.a
+*.lib
+*.dll
+*.dylib
+*.exe
+*.out
+
+# ----- Python cache -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+*.whl
+*.sh
+
+# ----- Model weights & large binary files -----
+*.engine
+*.pth
+*.onnx
+*.trt
+*.weights
+
+# ----- Map & point cloud data files -----
+*.pcd
+*.bag
+*.db3
+*.mcap
+*.png
+*.txt
+
+# ----- Compressed archives -----
+*.zip
+*.tar.gz
+*.tar.bz2
+*.rar
+*.7z
+
+# ----- IDE / Editor -----
+.vscode/
+.idea/
+.codex
+*.swp
+*.swo
+*~
+.project
+.cproject
+.settings/
+
+# ----- OS generated files -----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ----- Miscellaneous -----
+*.log
+bin
+core.*
+.omx/
