@@ -27,6 +27,21 @@ def sample_template(task_group_name, task_id):
     }
 
 
+def symbolic_floor_template(task_group_name, waypoint_task_ids):
+    return {
+        "task_group_name": task_group_name,
+        "subtasks": [
+            {
+                "subtask_name": "main_road",
+                "waypoints": [
+                    {"waypoint_id": f"p{index}", "waypoint_task_id": task_id}
+                    for index, task_id in enumerate(waypoint_task_ids)
+                ],
+            }
+        ],
+    }
+
+
 def test_discover_template_pairs_lists_all_valid_pairs(tmp_path):
     write_json(tmp_path / "A_5_501.json", sample_template("A_5_501", "demo_elevator_in_3_x"))
     write_json(tmp_path / "A_5_503.json", sample_template("A_5_503", "demo_elevator_out_3_5"))
@@ -70,6 +85,66 @@ def test_preview_task_files_builds_output_names_and_rewrite_summary(tmp_path):
     ]
     assert preview["generated_files"][0]["rewrites"][0]["after"] == "demo_elevator_out_3_8"
     assert preview["generated_files"][1]["rewrites"][0]["after"] == "demo_elevator_in_8_3"
+
+
+def test_symbolic_floor_task_ids_are_copied_without_waypoint_rewrites(tmp_path):
+    template_01 = tmp_path / "A_5_501.json"
+    template_03 = tmp_path / "A_5_503.json"
+    write_json(
+        template_01,
+        symbolic_floor_template(
+            "A_5_501",
+            [
+                "11_1_open_door_go",
+                "11_1_elevator_in_n_x",
+                "11_1_elevator_out_n_x",
+                "11_1_close_elevdoor_x",
+            ],
+        ),
+    )
+    write_json(
+        template_03,
+        symbolic_floor_template(
+            "A_5_503",
+            [
+                "11_1_elevator_in_x_n",
+                "11_1_elevator_out_x_n",
+                "11_1_close_elevdoor_n",
+                "11_1_close_door_back",
+            ],
+        ),
+    )
+
+    pairs = discover_template_pairs(tmp_path)
+    preview = preview_task_files(
+        template_01=template_01,
+        template_03=template_03,
+        start=8,
+        end=8,
+        output_dir=tmp_path,
+    )
+    result = generate_task_files(
+        template_01=template_01,
+        template_03=template_03,
+        start=8,
+        end=8,
+        output_dir=tmp_path,
+        overwrite=True,
+    )
+
+    generated_01 = json.loads((tmp_path / "A_8_801.json").read_text(encoding="utf-8"))
+    generated_03 = json.loads((tmp_path / "A_8_803.json").read_text(encoding="utf-8"))
+
+    assert pairs[0]["source_floor"] is None
+    assert pairs[0]["task_id_mode"] == "symbolic"
+    assert preview["pair"]["task_id_mode"] == "symbolic"
+    assert preview["generated_files"][0]["rewrites"] == []
+    assert result["generated_files"][0]["rewrites"] == []
+    assert generated_01["task_group_name"] == "A_8_801"
+    assert generated_01["subtasks"][0]["waypoints"][1]["waypoint_task_id"] == "11_1_elevator_in_n_x"
+    assert generated_01["subtasks"][0]["waypoints"][3]["waypoint_task_id"] == "11_1_close_elevdoor_x"
+    assert generated_03["subtasks"][0]["waypoints"][0]["waypoint_task_id"] == "11_1_elevator_in_x_n"
+    assert generated_03["subtasks"][0]["waypoints"][2]["waypoint_task_id"] == "11_1_close_elevdoor_n"
 
 
 def test_generate_task_files_writes_outputs_with_rewritten_task_ids(tmp_path):

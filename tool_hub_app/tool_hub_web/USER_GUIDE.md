@@ -810,6 +810,7 @@ demo.workspace.json
 - 建议先预览，再生成。
 - 如果输出目录已有同名文件且未勾选 `overwrite`，会拒绝覆盖。
 - 源楼层如果自动识别失败，可手动指定。
+- 页面会显示任务名模式：`numeric` 模式会按目标楼层改写 `waypoint_task_id`；`symbolic` 模式用于 `n/x` 命名的 XML 模板，只复制 JSON 并更新任务组名称和输出文件名。
 
 ## 11. Task Attribute Batch Generator
 

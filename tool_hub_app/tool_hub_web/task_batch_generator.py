@@ -19,6 +19,11 @@ TASK_PATTERNS = {
         r"^(?P<prefix>.+)_elevator_out_(?P<target>\d+)_(?P<source>\d+)$"
     ),
 }
+SYMBOLIC_TASK_PATTERNS = {
+    "elevator_in": re.compile(r"^.+_elevator_in_(?:n_x|x_n)$"),
+    "elevator_out": re.compile(r"^.+_elevator_out_(?:n_x|x_n)$"),
+    "close_elevdoor": re.compile(r"^.+_close_elevdoor_[nx]$"),
+}
 
 
 def resolve_directory(raw_path):
@@ -56,54 +61,73 @@ def load_json(path):
         return json.load(file)
 
 
-def infer_source_floor(template_data, template_floor, fallback=None):
-    candidates = []
+def iter_waypoint_task_ids(template_data):
     for subtask in template_data.get("subtasks", []):
         for waypoint in subtask.get("waypoints", []):
             task_id = waypoint.get("waypoint_task_id", "")
-            if not isinstance(task_id, str) or not task_id:
-                continue
+            if isinstance(task_id, str) and task_id:
+                yield task_id
 
-            match = TASK_PATTERNS["elevator_in_source"].match(task_id)
-            if match:
-                candidates.append(int(match.group("source")))
-                continue
 
-            match = TASK_PATTERNS["elevator_out_source_target"].match(task_id)
-            if match:
-                source = int(match.group("source"))
-                target = int(match.group("target"))
-                if target == template_floor:
-                    candidates.append(source)
-                elif source == template_floor:
-                    candidates.append(target)
-                continue
+def uses_symbolic_floor_task_ids(template_data):
+    for task_id in iter_waypoint_task_ids(template_data):
+        if any(pattern.match(task_id) for pattern in SYMBOLIC_TASK_PATTERNS.values()):
+            return True
+    return False
 
-            match = TASK_PATTERNS["elevator_in_target_source"].match(task_id)
-            if match:
-                target = int(match.group("target"))
-                source = int(match.group("source"))
-                if target == template_floor:
-                    candidates.append(source)
-                elif source == template_floor:
-                    candidates.append(target)
-                continue
 
-            match = TASK_PATTERNS["elevator_out_target_source"].match(task_id)
-            if match:
-                target = int(match.group("target"))
-                source = int(match.group("source"))
-                if target == template_floor:
-                    candidates.append(source)
-                elif source == template_floor:
-                    candidates.append(target)
-                continue
+def detect_task_id_mode(template_01_data, template_03_data):
+    has_symbolic_01 = uses_symbolic_floor_task_ids(template_01_data)
+    has_symbolic_03 = uses_symbolic_floor_task_ids(template_03_data)
+    if has_symbolic_01 != has_symbolic_03:
+        raise ValueError("Sample task id modes do not match.")
+    return "symbolic" if has_symbolic_01 else "numeric"
 
-            match = TASK_PATTERNS["close_elevdoor"].match(task_id)
-            if match:
-                floor = int(match.group("floor"))
-                if floor != template_floor:
-                    candidates.append(floor)
+
+def infer_source_floor(template_data, template_floor, fallback=None):
+    candidates = []
+    for task_id in iter_waypoint_task_ids(template_data):
+
+        match = TASK_PATTERNS["elevator_in_source"].match(task_id)
+        if match:
+            candidates.append(int(match.group("source")))
+            continue
+
+        match = TASK_PATTERNS["elevator_out_source_target"].match(task_id)
+        if match:
+            source = int(match.group("source"))
+            target = int(match.group("target"))
+            if target == template_floor:
+                candidates.append(source)
+            elif source == template_floor:
+                candidates.append(target)
+            continue
+
+        match = TASK_PATTERNS["elevator_in_target_source"].match(task_id)
+        if match:
+            target = int(match.group("target"))
+            source = int(match.group("source"))
+            if target == template_floor:
+                candidates.append(source)
+            elif source == template_floor:
+                candidates.append(target)
+            continue
+
+        match = TASK_PATTERNS["elevator_out_target_source"].match(task_id)
+        if match:
+            target = int(match.group("target"))
+            source = int(match.group("source"))
+            if target == template_floor:
+                candidates.append(source)
+            elif source == template_floor:
+                candidates.append(target)
+            continue
+
+        match = TASK_PATTERNS["close_elevdoor"].match(task_id)
+        if match:
+            floor = int(match.group("floor"))
+            if floor != template_floor:
+                candidates.append(floor)
 
     if candidates:
         return Counter(candidates).most_common(1)[0][0]
@@ -129,15 +153,21 @@ def validate_template_pair(template_01, template_03):
 
     template_01_data = load_json(template_01)
     template_03_data = load_json(template_03)
-    source_floor_01 = infer_source_floor(template_01_data, floor_01)
-    source_floor_03 = infer_source_floor(template_03_data, floor_03)
-    if source_floor_01 != source_floor_03:
-        raise ValueError("Sample source floors do not match.")
+    task_id_mode = detect_task_id_mode(template_01_data, template_03_data)
+    if task_id_mode == "symbolic":
+        source_floor = None
+    else:
+        source_floor_01 = infer_source_floor(template_01_data, floor_01)
+        source_floor_03 = infer_source_floor(template_03_data, floor_03)
+        if source_floor_01 != source_floor_03:
+            raise ValueError("Sample source floors do not match.")
+        source_floor = source_floor_01
 
     return {
         "prefix": prefix_01,
         "template_floor": floor_01,
-        "source_floor": source_floor_01,
+        "source_floor": source_floor,
+        "task_id_mode": task_id_mode,
         "template_01_path": str(template_01),
         "template_03_path": str(template_03),
     }
@@ -198,11 +228,14 @@ def rewrite_waypoint_task_id(task_id, template_floor, target_floor, source_floor
     return task_id
 
 
-def build_output_data(template_data, output_name, template_floor, target_floor, source_floor):
+def build_output_data(template_data, output_name, template_floor, target_floor, source_floor, task_id_mode="numeric"):
     data = deepcopy(template_data)
     data["task_group_name"] = output_name
 
     rewrites = []
+    if task_id_mode == "symbolic":
+        return data, rewrites
+
     for subtask in data.get("subtasks", []):
         for waypoint in subtask.get("waypoints", []):
             if "waypoint_task_id" not in waypoint:
@@ -237,6 +270,7 @@ def build_generated_file_records(
     end,
     output_dir,
     source_floor,
+    task_id_mode="numeric",
 ):
     output_dir = Path(output_dir).resolve()
     records = []
@@ -244,7 +278,7 @@ def build_generated_file_records(
         output_name = build_output_name(prefix, target_floor, suffix)
         output_path = output_dir / f"{output_name}.json"
         document, rewrites = build_output_data(
-            template_data, output_name, template_floor, target_floor, source_floor
+            template_data, output_name, template_floor, target_floor, source_floor, task_id_mode
         )
         records.append(
             {
@@ -288,7 +322,10 @@ def preview_task_files(
     pair = validate_template_pair(template_01, template_03)
     template_01_data, template_03_data = load_template_pair(template_01, template_03)
     output_dir = Path(output_dir).resolve() if output_dir else Path(template_01).resolve().parent
-    source_floor = _normalize_source_floor(elevator_floor, template_01_data, pair["template_floor"])
+    if pair["task_id_mode"] == "symbolic":
+        source_floor = None
+    else:
+        source_floor = _normalize_source_floor(elevator_floor, template_01_data, pair["template_floor"])
 
     generated_files = sort_generated_file_records(
         build_generated_file_records(
@@ -301,6 +338,7 @@ def preview_task_files(
             end,
             output_dir,
             source_floor,
+            pair["task_id_mode"],
         )
         + build_generated_file_records(
             template_03,
@@ -312,6 +350,7 @@ def preview_task_files(
             end,
             output_dir,
             source_floor,
+            pair["task_id_mode"],
         )
     )
 
@@ -354,7 +393,10 @@ def generate_task_files(
     template_01_data, template_03_data = load_template_pair(template_01, template_03)
     output_dir = Path(output_dir).resolve() if output_dir else Path(template_01).resolve().parent
     output_dir.mkdir(parents=True, exist_ok=True)
-    source_floor = _normalize_source_floor(elevator_floor, template_01_data, pair["template_floor"])
+    if pair["task_id_mode"] == "symbolic":
+        source_floor = None
+    else:
+        source_floor = _normalize_source_floor(elevator_floor, template_01_data, pair["template_floor"])
 
     generated_files = sort_generated_file_records(
         build_generated_file_records(
@@ -367,6 +409,7 @@ def generate_task_files(
             end,
             output_dir,
             source_floor,
+            pair["task_id_mode"],
         )
         + build_generated_file_records(
             template_03,
@@ -378,6 +421,7 @@ def generate_task_files(
             end,
             output_dir,
             source_floor,
+            pair["task_id_mode"],
         )
     )
 
@@ -440,16 +484,22 @@ def discover_template_pairs(directory):
             continue
         template_01_data = load_json(record["template_01_path"])
         template_03_data = load_json(record["template_03_path"])
-        source_floor_01 = infer_source_floor(template_01_data, record["template_floor"])
-        source_floor_03 = infer_source_floor(template_03_data, record["template_floor"])
-        if source_floor_01 != source_floor_03:
-            raise ValueError(
-                f"Sample pair source floors do not match for {record['prefix']}_{record['template_floor']}."
-            )
+        task_id_mode = detect_task_id_mode(template_01_data, template_03_data)
+        if task_id_mode == "symbolic":
+            source_floor = None
+        else:
+            source_floor_01 = infer_source_floor(template_01_data, record["template_floor"])
+            source_floor_03 = infer_source_floor(template_03_data, record["template_floor"])
+            if source_floor_01 != source_floor_03:
+                raise ValueError(
+                    f"Sample pair source floors do not match for {record['prefix']}_{record['template_floor']}."
+                )
+            source_floor = source_floor_01
         pairs.append(
             {
                 **record,
-                "source_floor": source_floor_01,
+                "source_floor": source_floor,
+                "task_id_mode": task_id_mode,
             }
         )
 

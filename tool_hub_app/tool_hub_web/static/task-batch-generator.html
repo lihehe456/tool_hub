@@ -289,7 +289,8 @@
           <button type="button" class="batch-pair-card" data-pair-index="${index}" data-selected="${index === state.selectedPairIndex ? "true" : "false"}">
             <strong>${pair.prefix}_${pair.template_floor}</strong>
             <div class="batch-pair-meta">样本目录: ${pair.directory}</div>
-            <div class="batch-pair-meta">源楼层: ${pair.source_floor}</div>
+            <div class="batch-pair-meta">模式: ${pair.task_id_mode || "numeric"}</div>
+            <div class="batch-pair-meta">源楼层: ${pair.source_floor ?? "自动识别"}</div>
             <div class="batch-pair-meta">01: ${pair.template_01_path}</div>
             <div class="batch-pair-meta">03: ${pair.template_03_path}</div>
           </button>
