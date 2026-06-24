@@ -9,14 +9,14 @@
   <body>
     <main class="hub-page">
       <header class="hub-hero">
-        <p class="hub-kicker">FusionCloudRobot</p>
+        <p class="hub-kicker">FusionCloudRobot · v2.0</p>
         <h1>RY-Robot Tool Hub</h1>
-        <p class="hub-subtitle">统一入口，集中访问路径编辑、任务组装配、任务组混编和任务编辑。</p>
+        <p class="hub-subtitle">统一入口，集中访问子任务地图编排、行为树任务模板、路径编辑和任务编辑。</p>
       </header>
 
       <section class="hub-flow">
         <strong>推荐流程</strong>
-        <span>Path Editor -> Task Group Builder / Task Group Mixer -> Task Editor</span>
+        <span>Subtask Composer -> Waypoint Task Builder -> Task Editor</span>
       </section>
 
       <section id="tool-grid" class="tool-grid">
@@ -43,6 +43,12 @@
           <p>编辑任务组中的路点语义字段，并同步更新旁路 workspace 文件。</p>
           <p class="tool-scenario">适合任务组生成后的语义微调。</p>
           <a class="tool-link" href="/task-editor">进入工具</a>
+        </article>
+        <article class="tool-card" data-tool="subtask-composer">
+          <h2>Subtask Composer</h2>
+          <p>直接在地图上编辑单个子任务 JSON，绘制路径点并编排任务属性。</p>
+          <p class="tool-scenario">适合新版分级任务结构的单子任务维护。</p>
+          <a class="tool-link" href="/subtask-composer">进入工具</a>
         </article>
         <article class="tool-card" data-tool="waypoint-task-builder">
           <h2>Waypoint Task Builder</h2>

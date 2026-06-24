@@ -8,6 +8,9 @@ from runtime_paths import default_nav2_tree_nodes_xml
 
 REPO_SRC_DIR = Path(__file__).resolve().parents[2]
 NODE_MODEL_XML_PATH = default_nav2_tree_nodes_xml()
+FUSION_INSTALL_NODE_MODEL_XML_PATH = Path(
+    "/home/lmy/LMY/0_Code/FusionCloudRobot/install/nav2_behavior_tree/share/nav2_behavior_tree/nav2_tree_nodes.xml"
+)
 
 MANUAL_NODE_SCHEMAS = {
     "Sequence": {
@@ -87,6 +90,13 @@ MANUAL_NODE_SCHEMAS = {
         "output_ports": [],
         "min_children": 1,
         "max_children": 1,
+    },
+    "SetBlackboard": {
+        "kind": "action",
+        "fields": [
+            {"name": "output_key", "label": "output_key", "default": ""},
+            {"name": "value", "label": "value", "default": ""},
+        ],
     },
     "DoorControl": {
         "kind": "action",
@@ -432,21 +442,36 @@ def _normalize_manual_schema(name, schema):
     return normalized
 
 
+def _node_model_candidates():
+    candidates = [NODE_MODEL_XML_PATH]
+    if FUSION_INSTALL_NODE_MODEL_XML_PATH not in candidates:
+        candidates.append(FUSION_INSTALL_NODE_MODEL_XML_PATH)
+    return candidates
+
+
+def _load_node_model_schemas(path):
+    root = ET.parse(path).getroot()
+    model = root.find("TreeNodesModel")
+    nodes = {}
+    for element in list(model or []):
+        node_id = element.attrib.get("ID")
+        if not node_id:
+            continue
+        nodes[node_id] = _schema_from_model_node(element)
+    return nodes
+
+
 @lru_cache(maxsize=1)
 def _load_supported_node_schemas():
     nodes = {}
-    if NODE_MODEL_XML_PATH.is_file():
+    for node_model_path in _node_model_candidates():
+        if not node_model_path.is_file():
+            continue
         try:
-            root = ET.parse(NODE_MODEL_XML_PATH).getroot()
+            nodes = _load_node_model_schemas(node_model_path)
         except ET.ParseError:
-            root = None
-        if root is not None:
-            model = root.find("TreeNodesModel")
-            for element in list(model or []):
-                node_id = element.attrib.get("ID")
-                if not node_id:
-                    continue
-                nodes[node_id] = _schema_from_model_node(element)
+            continue
+        break
 
     for name, override in MANUAL_NODE_SCHEMAS.items():
         manual_schema = _normalize_manual_schema(name, override)
@@ -458,8 +483,14 @@ def _load_supported_node_schemas():
                 if not base_schema
                 else []
             )
-        merged = {**base_schema, **manual_schema}
-        merged["fields"] = _merge_named_entries(base_schema.get("fields", []), manual_schema.get("fields", []))
+        merged = {**manual_schema, **base_schema}
+        if base_schema:
+            merged["model_tag"] = base_schema.get("model_tag")
+        merged["fields"] = (
+            base_schema.get("fields", [])
+            if base_schema
+            else _merge_named_entries(base_schema.get("fields", []), manual_schema.get("fields", []))
+        )
         merged["input_ports"] = _merge_named_entries(
             base_schema.get("input_ports", []),
             manual_input_ports,

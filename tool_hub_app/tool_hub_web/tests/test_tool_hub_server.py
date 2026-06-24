@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from tool_hub_web.server import create_app
@@ -44,13 +46,16 @@ def test_hub_home_and_tool_routes_are_available(client):
     task_attribute_batch_generator = client.get("/task-attribute-batch-generator")
     virtual_wall_builder = client.get("/virtual-wall-builder")
     pcd_to_map = client.get("/pcd-to-map")
+    subtask_composer = client.get("/subtask-composer")
 
     assert home.status_code == 200
     assert b"RY-Robot Tool Hub" in home.data
+    assert b"v2.0" in home.data
     assert b"Waypoint Task Builder" in home.data
     assert b"Task Batch Generator" in home.data
     assert b"Task Attribute Batch Generator" in home.data
     assert b"Virtual Wall Builder" in home.data
+    assert b"Subtask Composer" in home.data
     assert path_editor.status_code == 200
     assert b"Path Editor Web" in path_editor.data
     assert task_groups.status_code == 200
@@ -67,6 +72,11 @@ def test_hub_home_and_tool_routes_are_available(client):
     assert b"Virtual Wall Builder" in virtual_wall_builder.data
     assert pcd_to_map.status_code == 200
     assert b"PCD to 2D Map" in pcd_to_map.data
+    assert subtask_composer.status_code == 200
+    assert b"Subtask Composer" in subtask_composer.data
+    assert b'id="delete-point"' not in subtask_composer.data
+    assert b'data-tool="delete"' in subtask_composer.data
+    assert b'id="subtask-tabs"' in subtask_composer.data
 
 
 def test_waypoint_task_builder_runtime_config_exposes_current_root(client, tmp_path):
@@ -101,6 +111,42 @@ def test_task_editor_runtime_config_is_available_under_hub_mount(client):
     assert payload["default_browse_root"] == "/opt/ry"
 
 
+def test_subtask_composer_runtime_config_uses_task_editor_attribute_defaults(client):
+    response = client.get("/subtask-composer/api/runtime_config")
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["default_root"] == "/opt/ry"
+    assert payload["default_waypoint_tasks_path"].endswith("/waypoints_attributes/waypoint_tasks")
+    assert payload["default_speed_modes_path"].endswith("/waypoints_attributes/speed_modes")
+
+
+def test_subtask_composer_attributes_load_from_custom_paths(client, tmp_path):
+    waypoint_tasks_dir = tmp_path / "waypoint_tasks"
+    speed_modes_dir = tmp_path / "speed_modes"
+    single_point_dir = speed_modes_dir / "single_point"
+    waypoint_tasks_dir.mkdir()
+    speed_modes_dir.mkdir()
+    single_point_dir.mkdir()
+    (waypoint_tasks_dir / "open_door.xml").write_text("<root />", encoding="utf-8")
+    (speed_modes_dir / "slow.xml").write_text("<root />", encoding="utf-8")
+    (single_point_dir / "dock.xml").write_text("<root />", encoding="utf-8")
+
+    response = client.get(
+        "/subtask-composer/api/attributes",
+        query_string={
+            "waypoint_tasks_path": str(waypoint_tasks_dir),
+            "speed_modes_path": str(speed_modes_dir),
+        },
+    )
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["waypoint_tasks"] == ["open_door"]
+    assert payload["speed_modes"] == ["slow"]
+    assert payload["speed_modes_single"] == ["dock"]
+
+
 @pytest.mark.parametrize(
     ("endpoint", "field"),
     [
@@ -109,6 +155,7 @@ def test_task_editor_runtime_config_is_available_under_hub_mount(client):
         ("/task-attribute-batch-generator/api/runtime_config", "default_root"),
         ("/virtual-wall-builder/api/runtime_config", "default_root"),
         ("/pcd-to-map/api/runtime_config", "default_root"),
+        ("/subtask-composer/api/runtime_config", "default_root"),
     ],
 )
 def test_tool_runtime_configs_default_to_opt_ry(client, endpoint, field):
@@ -232,6 +279,138 @@ def test_pcd_to_map_preview_and_export_apis(client, tmp_path):
     assert export_payload["ok"] is True
     assert (output_dir / "selected_map.pgm").is_file()
     assert (output_dir / "selected_map.yaml").is_file()
+
+
+def test_subtask_composer_load_create_save_and_build_return_apis(client, tmp_path):
+    task_path = tmp_path / "indoor.json"
+    return_path = tmp_path / "indoor_r.json"
+    task_path.write_text(
+        """
+{
+  "change_loc": false,
+  "map_url": "/maps/indoor.yaml",
+  "pcd_url": "",
+  "subtask_name": "indoor",
+  "waypoints": [
+    {
+      "waypoint_id": "indoor_0",
+      "pose": {
+        "position": {"x": 1.0, "y": 2.0, "z": 0},
+        "orientation": {"x": 0, "y": 0, "z": 0, "w": 1}
+      },
+      "speed_mode": "task_point",
+      "waypoint_task_id": "open_door_go",
+      "is_task_point": true,
+      "is_single_point": true,
+      "is_backward": false
+    }
+  ]
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    load_response = client.post("/subtask-composer/api/load", json={"path": str(task_path)})
+    new_response = client.post(
+        "/subtask-composer/api/new",
+        json={"subtask_name": "outdoor", "map_url": "/maps/outdoor.yaml"},
+    )
+    save_response = client.post(
+        "/subtask-composer/api/save",
+        json={
+            "path": str(tmp_path / "outdoor.json"),
+            "subtask": new_response.get_json()["subtask"],
+        },
+    )
+    return_response = client.post(
+        "/subtask-composer/api/build_return",
+        json={
+            "subtask": load_response.get_json()["subtask"],
+            "subtask_name": "indoor_r",
+            "waypoint_prefix": "indoor_back",
+            "output_path": str(return_path),
+        },
+    )
+    browse_response = client.post("/subtask-composer/api/browse", json={"path": str(tmp_path)})
+
+    assert load_response.status_code == 200
+    assert load_response.get_json()["subtask"]["subtask_name"] == "indoor"
+    assert load_response.get_json()["subtask"]["waypoints"][0]["waypoint_task_id"] == "open_door_go"
+    assert new_response.status_code == 200
+    assert new_response.get_json()["subtask"] == {
+        "change_loc": False,
+        "map_url": "/maps/outdoor.yaml",
+        "pcd_url": "",
+        "subtask_name": "outdoor",
+        "waypoints": [],
+    }
+    assert save_response.status_code == 200
+    assert (tmp_path / "outdoor.json").is_file()
+    assert return_response.status_code == 200
+    assert return_path.is_file()
+    returned = return_response.get_json()["subtask"]
+    assert returned["subtask_name"] == "indoor_r"
+    assert returned["waypoints"][0]["waypoint_id"] == "indoor_back_0"
+    assert returned["waypoints"][0]["waypoint_task_id"] == ""
+    assert browse_response.status_code == 200
+    assert any(
+        entry["name"] == "indoor.json" and entry["is_json"]
+        for entry in browse_response.get_json()["entries"]
+    )
+
+
+def test_subtask_composer_loads_and_saves_task_group_documents(client, tmp_path):
+    task_path = tmp_path / "group.json"
+    saved_path = tmp_path / "group_saved.json"
+    task_path.write_text(
+        """
+{
+  "task_group_name": "delivery",
+  "selected_subtask_ids": ["go"],
+  "subtasks": [
+    {
+      "id": "go",
+      "subtask_name": "go",
+      "map_url": "/maps/go.yaml",
+      "waypoints": []
+    },
+    {
+      "id": "back",
+      "subtask_name": "back",
+      "map_url": "/maps/back.yaml",
+      "waypoints": []
+    }
+  ]
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    load_response = client.post("/subtask-composer/api/load", json={"path": str(task_path)})
+    payload = load_response.get_json()
+    loaded_subtask_names = [subtask["subtask_name"] for subtask in payload["subtasks"]]
+    payload["subtasks"][0]["subtask_name"] = "go_edited"
+    save_response = client.post(
+        "/subtask-composer/api/save",
+        json={
+            "path": str(saved_path),
+            "document_type": payload["document_type"],
+            "task_group": payload["task_group"],
+            "subtasks": payload["subtasks"],
+        },
+    )
+    saved = json.loads(saved_path.read_text(encoding="utf-8"))
+
+    assert load_response.status_code == 200
+    assert payload["document_type"] == "task_group"
+    assert payload["subtask"]["subtask_name"] == "go"
+    assert loaded_subtask_names == ["go", "back"]
+    assert save_response.status_code == 200
+    assert save_response.get_json()["document_type"] == "task_group"
+    assert saved["task_group_name"] == "delivery"
+    assert saved["selected_subtask_ids"] == ["go"]
+    assert saved["subtasks"][0]["id"] == "go"
+    assert saved["subtasks"][0]["subtask_name"] == "go_edited"
 
 
 def test_pcd_to_map_preview_and_export_include_same_directory_trajectory(client, tmp_path):

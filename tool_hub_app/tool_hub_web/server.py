@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import copy
+import json
 import sys
 import threading
 import uuid
@@ -48,6 +49,14 @@ try:
         project_trajectory_to_map,
         render_preview_with_trajectory,
     )
+    from tool_hub_web.subtask_composer import (
+        build_return_subtask,
+        create_empty_subtask,
+        load_task_document_file,
+        load_subtask_file,
+        save_task_document_file,
+        save_subtask_file,
+    )
     from tool_hub_web.waypoint_task_builder import (
         load_waypoint_task_file,
         save_waypoint_task_file,
@@ -80,6 +89,14 @@ except ModuleNotFoundError:
         find_trajectory_pcd,
         project_trajectory_to_map,
         render_preview_with_trajectory,
+    )
+    from tool_hub_web.subtask_composer import (
+        build_return_subtask,
+        create_empty_subtask,
+        load_task_document_file,
+        load_subtask_file,
+        save_task_document_file,
+        save_subtask_file,
     )
     from tool_hub_web.waypoint_task_builder import (
         load_waypoint_task_file,
@@ -204,6 +221,7 @@ def create_app(config=None):
                     "name": child.name,
                     "path": str(child),
                     "is_dir": child.is_dir(),
+                    "is_json": child.is_file() and child.suffix.lower() == ".json",
                     "is_yaml": child.is_file() and child.suffix.lower() in {".yaml", ".yml"},
                     "is_pgm": child.is_file() and child.suffix.lower() == ".pgm",
                     "is_pcd": child.is_file() and child.suffix.lower() == ".pcd",
@@ -214,6 +232,27 @@ def create_app(config=None):
             "parent": str(target.parent),
             "entries": entries,
         }
+
+    def resolve_attribute_dir(raw_path, field_name, default_path):
+        used_default = not raw_path
+        candidate = Path(raw_path).expanduser() if raw_path else Path(default_path)
+        if not candidate.is_absolute():
+            raise ValueError(f"{field_name} must be an absolute path")
+        target = candidate.resolve()
+        if not target.is_dir():
+            if used_default:
+                return None
+            raise ValueError(f"{field_name} directory not found: {target}")
+        return target
+
+    def collect_xml_stem_names(folder):
+        if folder is None:
+            return []
+        return [
+            child.stem
+            for child in sorted(folder.iterdir(), key=lambda item: item.name.lower())
+            if child.is_file() and child.suffix.lower() == ".xml"
+        ]
 
     def build_pcd_preview_payload(payload, job_id=None):
         pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
@@ -337,6 +376,10 @@ def create_app(config=None):
     def pcd_to_map_page():
         return send_from_directory(STATIC_DIR, "pcd-to-map.html")
 
+    @app.get("/subtask-composer")
+    def subtask_composer_page():
+        return send_from_directory(STATIC_DIR, "subtask-composer.html")
+
     @app.get("/waypoint-task-builder/api/runtime_config")
     def waypoint_task_builder_runtime_config():
         return jsonify({"waypoint_tasks_root": str(waypoint_tasks_root())})
@@ -372,6 +415,153 @@ def create_app(config=None):
     @app.get("/pcd-to-map/api/runtime_config")
     def pcd_to_map_runtime_config():
         return jsonify({"default_root": str(DEFAULT_USER_BROWSE_ROOT)})
+
+    @app.get("/subtask-composer/api/runtime_config")
+    def subtask_composer_runtime_config():
+        attrs_dir = Path(app.config["ATTRS_DIR"])
+        return jsonify(
+            {
+                "default_root": str(DEFAULT_USER_BROWSE_ROOT),
+                "default_waypoint_tasks_path": str(attrs_dir / "waypoint_tasks"),
+                "default_speed_modes_path": str(attrs_dir / "speed_modes"),
+            }
+        )
+
+    @app.get("/subtask-composer/api/attributes")
+    def subtask_composer_attributes():
+        attrs_dir = Path(app.config["ATTRS_DIR"])
+        try:
+            speed_dir = resolve_attribute_dir(
+                request.args.get("speed_modes_path", ""),
+                "speed_modes_path",
+                attrs_dir / "speed_modes",
+            )
+            task_dir = resolve_attribute_dir(
+                request.args.get("waypoint_tasks_path", ""),
+                "waypoint_tasks_path",
+                attrs_dir / "waypoint_tasks",
+            )
+        except ValueError as exc:
+            return json_error(str(exc), 400)
+
+        speed_single_dir = speed_dir / "single_point" if speed_dir is not None else None
+        return jsonify(
+            {
+                "speed_modes": collect_xml_stem_names(speed_dir),
+                "speed_modes_single": collect_xml_stem_names(speed_single_dir)
+                if speed_single_dir is not None and speed_single_dir.is_dir()
+                else [],
+                "waypoint_tasks": collect_xml_stem_names(task_dir),
+            }
+        )
+
+    @app.post("/subtask-composer/api/browse")
+    def subtask_composer_browse():
+        raw_path = (request.get_json(silent=True) or {}).get("path", str(DEFAULT_USER_BROWSE_ROOT))
+        try:
+            return jsonify(browse_absolute_path(raw_path, DEFAULT_USER_BROWSE_ROOT))
+        except ValueError as exc:
+            return json_error(str(exc), 400)
+
+    @app.post("/subtask-composer/api/load")
+    def subtask_composer_load():
+        payload = request.get_json(silent=True) or {}
+        try:
+            target = resolve_user_path(payload.get("path", ""), "path")
+            if not target.is_file():
+                return json_error(f"Subtask file not found: {target}", 404)
+            document_payload = load_task_document_file(target)
+            active_index = document_payload["active_subtask_index"]
+            active_subtask = (
+                document_payload["subtasks"][active_index]
+                if active_index >= 0
+                else create_empty_subtask("new_subtask")
+            )
+            return jsonify(
+                {
+                    "path": str(target),
+                    "subtask": active_subtask,
+                    **document_payload,
+                }
+            )
+        except (ValueError, json.JSONDecodeError) as exc:
+            return json_error(str(exc), 400)
+
+    @app.post("/subtask-composer/api/new")
+    def subtask_composer_new():
+        payload = request.get_json(silent=True) or {}
+        subtask_name = (payload.get("subtask_name") or "new_subtask").strip()
+        return jsonify(
+            {
+                "subtask": create_empty_subtask(
+                    subtask_name=subtask_name,
+                    map_url=payload.get("map_url", ""),
+                    pcd_url=payload.get("pcd_url", ""),
+                    change_loc=payload.get("change_loc", False),
+                )
+            }
+        )
+
+    @app.post("/subtask-composer/api/save")
+    def subtask_composer_save():
+        payload = request.get_json(silent=True) or {}
+        try:
+            target = resolve_user_path(payload.get("path", ""), "path")
+            if "subtasks" in payload or "task_group" in payload:
+                saved_path = save_task_document_file(target, payload)
+                document_payload = load_task_document_file(saved_path)
+                active_index = document_payload["active_subtask_index"]
+                active_subtask = (
+                    document_payload["subtasks"][active_index]
+                    if active_index >= 0
+                    else create_empty_subtask("new_subtask")
+                )
+                return jsonify(
+                    {
+                        "ok": True,
+                        "path": str(saved_path),
+                        "subtask": active_subtask,
+                        **document_payload,
+                    }
+                )
+
+            subtask = payload.get("subtask")
+            if subtask is None:
+                return json_error("subtask is required", 400)
+            saved_path = save_subtask_file(target, subtask)
+            document_payload = load_task_document_file(saved_path)
+            return jsonify(
+                {
+                    "ok": True,
+                    "path": str(saved_path),
+                    "subtask": document_payload["subtasks"][0],
+                    **document_payload,
+                }
+            )
+        except ValueError as exc:
+            return json_error(str(exc), 400)
+
+    @app.post("/subtask-composer/api/build_return")
+    def subtask_composer_build_return():
+        payload = request.get_json(silent=True) or {}
+        try:
+            subtask = payload.get("subtask")
+            if subtask is None:
+                return json_error("subtask is required", 400)
+            return_subtask = build_return_subtask(
+                subtask,
+                subtask_name=payload.get("subtask_name") or None,
+                waypoint_prefix=payload.get("waypoint_prefix") or None,
+            )
+            output_path = payload.get("output_path", "")
+            response_payload = {"subtask": return_subtask}
+            if output_path:
+                target = resolve_user_path(output_path, "output_path")
+                saved_path = save_subtask_file(target, return_subtask)
+                response_payload.update({"ok": True, "path": str(saved_path)})
+            return jsonify(response_payload)
+        except ValueError as exc:
+            return json_error(str(exc), 400)
 
     @app.post("/pcd-to-map/api/browse")
     def pcd_to_map_browse():

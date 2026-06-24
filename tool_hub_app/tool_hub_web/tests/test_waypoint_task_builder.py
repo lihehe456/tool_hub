@@ -1,8 +1,18 @@
+from pathlib import Path
+
+import pytest
+
 from tool_hub_web.waypoint_task_builder import (
     create_default_waypoint_task_document,
+    load_waypoint_task_file,
     parse_waypoint_task_xml,
     serialize_waypoint_task_document,
     supported_waypoint_task_nodes,
+)
+
+
+ENHANCED_WAYPOINT_TASKS_DIR = Path(
+    "/home/lmy/Downloads/0616/1个D户型验证/11_1/waypoint_tasks"
 )
 
 
@@ -63,6 +73,45 @@ def test_supported_waypoint_task_nodes_include_control_and_action_entries():
     assert "VirtualElevatorJudge" in nodes
 
 
+def test_supported_waypoint_task_nodes_include_enhanced_task_execution_nodes():
+    nodes = supported_waypoint_task_nodes()
+
+    assert "GetTaskTargetInfo" in nodes
+    assert [port["name"] for port in nodes["GetTaskTargetInfo"]["output_ports"]] == [
+        "community",
+        "building",
+        "unit",
+        "floor",
+        "success",
+    ]
+    assert "BuildElevatorDoorCommand" in nodes
+    assert [field["name"] for field in nodes["BuildElevatorDoorCommand"]["fields"]] == [
+        "floor",
+        "suffix",
+    ]
+    assert [port["name"] for port in nodes["BuildElevatorDoorCommand"]["output_ports"]] == [
+        "command",
+        "success",
+    ]
+    assert "LocationElevatorSceneProc" in nodes
+    assert "SetBlackboard" in nodes
+    assert [field["name"] for field in nodes["SetBlackboard"]["fields"]] == [
+        "output_key",
+        "value",
+    ]
+    assert [field["name"] for field in nodes["SetUseWheelOdom"]["fields"]] == [
+        "use_wheel_odom",
+        "map_path",
+        "x",
+        "y",
+        "z",
+        "yaw",
+        "pitch",
+        "roll",
+        "service_name",
+    ]
+
+
 def test_create_default_waypoint_task_document_uses_main_tree_sequence():
     document = create_default_waypoint_task_document("demo_task")
 
@@ -97,6 +146,46 @@ def test_parse_and_serialize_waypoint_task_xml_round_trip():
     assert document["tree"]["children"][1]["children"][0]["children"][1]["type"] == "Wait"
     assert '<RetryUntilSuccessful num_attempts="10">' in rendered
     assert '<PublishTaskStatus status_code="300" />' in rendered
+
+
+def test_parse_and_serialize_enhanced_waypoint_task_xml():
+    xml_text = """
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="WaitForElevator">
+      <GetTaskTargetInfo community="{community}" building="{building}" unit="{unit}" floor="{floor}" success="{task_target_success}" />
+      <SetBlackboard output_key="{origin_floor}" value="3" />
+      <BuildElevatorDoorCommand floor="{origin_floor}" suffix="+" command="{origin_open_door_command}" />
+      <LocationElevatorSceneProc data="true" />
+    </Sequence>
+  </BehaviorTree>
+</root>
+""".strip()
+
+    document = parse_waypoint_task_xml(xml_text, task_name="enhanced_task")
+    rendered = serialize_waypoint_task_document(document)
+
+    assert document["tree"]["children"][0]["type"] == "GetTaskTargetInfo"
+    assert document["tree"]["children"][1]["type"] == "SetBlackboard"
+    assert document["tree"]["children"][2]["attrs"]["command"] == "{origin_open_door_command}"
+    assert '<BuildElevatorDoorCommand floor="{origin_floor}" suffix="+"' in rendered
+    assert '<LocationElevatorSceneProc data="true" />' in rendered
+
+
+@pytest.mark.skipif(
+    not ENHANCED_WAYPOINT_TASKS_DIR.is_dir(),
+    reason="enhanced waypoint task fixture directory is not available",
+)
+def test_loads_all_enhanced_waypoint_task_files_from_reference_directory():
+    task_paths = sorted(ENHANCED_WAYPOINT_TASKS_DIR.rglob("*.xml"))
+
+    assert task_paths
+    for task_path in task_paths:
+        document = load_waypoint_task_file(task_path)
+        rendered = serialize_waypoint_task_document(document)
+
+        assert document["tree"]["type"]
+        assert "<BehaviorTree ID=\"MainTree\">" in rendered
 
 
 def test_parse_waypoint_task_xml_rejects_unsupported_nodes():

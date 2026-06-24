@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subtask Composer</title>
+    <link rel="stylesheet" href="/hub-static/hub.css">
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: monospace;
+        background: #1e1e1e;
+        color: #ccc;
+        height: 100vh;
+        overflow: hidden;
+      }
+      button {
+        padding: 4px 10px;
+        border: none;
+        color: #fff;
+        border-radius: 3px;
+        cursor: pointer;
+        font: 12px monospace;
+        background: #555;
+      }
+      button:hover { background: #666; }
+      button:disabled { opacity: 0.55; cursor: wait; }
+      input,
+      select {
+        width: 100%;
+        min-width: 0;
+        padding: 4px 8px;
+        background: #3a3a3a;
+        border: 1px solid #555;
+        color: #eee;
+        border-radius: 3px;
+        font: 12px monospace;
+      }
+      .composer-app {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        overflow: hidden;
+      }
+      .composer-topbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 8px;
+        background: #2d2d2d;
+        border-bottom: 1px solid #444;
+        min-height: 34px;
+      }
+      .composer-title {
+        margin: 0;
+        font-size: 14px;
+        color: #eee;
+        line-height: 1;
+      }
+      .composer-subtitle {
+        color: #888;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .topbar-spacer { flex: 1; }
+      .toolbar-link {
+        color: #9cdcfe;
+        font-size: 12px;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .composer-status {
+        max-width: 44vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+        color: #888;
+      }
+      .composer-status[data-error="true"] { color: #f48771; }
+      .file-panel {
+        background: #252525;
+        border-bottom: 1px solid #444;
+      }
+      .file-panel-header {
+        min-height: 30px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        background: #252525;
+      }
+      .file-panel-title {
+        color: #9cdcfe;
+        font-size: 12px;
+        font-weight: bold;
+      }
+      .file-panel-summary {
+        flex: 1;
+        min-width: 0;
+        color: #888;
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .file-panel-body {
+        display: grid;
+        grid-template-columns: minmax(260px, 1.4fr) minmax(240px, 1.2fr) minmax(150px, 0.6fr) minmax(150px, 0.6fr) auto;
+        gap: 6px;
+        align-items: end;
+        padding: 6px 8px 8px;
+      }
+      .file-panel[data-collapsed="true"] .file-panel-body { display: none; }
+      .subtask-tabs {
+        display: none;
+        gap: 4px;
+        padding: 4px 8px;
+        background: #252525;
+        border-bottom: 1px solid #444;
+        flex-wrap: wrap;
+      }
+      .subtask-tabs[data-visible="true"] { display: flex; }
+      .subtask-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        white-space: nowrap;
+        padding: 3px 12px;
+        background: #3a3a3a;
+        border: 1px solid #555;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 12px;
+        color: #aaa;
+      }
+      .subtask-tab:hover {
+        background: #454545;
+        border-color: #777;
+        color: #fff;
+      }
+      .subtask-tab[data-active="true"] {
+        background: #0e639c;
+        color: #fff;
+        border-color: #0e639c;
+      }
+      .composer-field {
+        display: grid;
+        gap: 3px;
+        color: #aaa;
+        font-size: 11px;
+      }
+      .composer-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .composer-actions button,
+      .composer-icon-button {
+        font-size: 12px;
+      }
+      #load-subtask,
+      #load-map,
+      #apply-point { background: #0e639c; }
+      #load-subtask:hover,
+      #load-map:hover,
+      #apply-point:hover { background: #1177bb; }
+      #save-subtask,
+      #build-return { background: #2d7a2d; }
+      #save-subtask:hover,
+      #build-return:hover { background: #3a9a3a; }
+      .composer-icon-button[data-active="true"] {
+        background: #0e639c;
+        color: #fff;
+      }
+      .composer-layout {
+        display: grid;
+        grid-template-columns: 300px minmax(640px, 1fr) auto;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .composer-sidebar {
+        background: #252525;
+        border-right: 1px solid #444;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .panel-header {
+        padding: 6px 10px;
+        background: #2d2d2d;
+        border-bottom: 1px solid #444;
+        font-size: 12px;
+        font-weight: bold;
+        color: #eee;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .panel-header span { flex: 1; }
+      .tool-row,
+      .offset-row {
+        padding: 6px 8px;
+        border-bottom: 1px solid #444;
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .offset-row label {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: #888;
+        font-size: 11px;
+      }
+      .offset-row input { width: 72px; }
+      .waypoint-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 3px;
+      }
+      .waypoint-item {
+        width: 100%;
+        padding: 4px 7px;
+        margin: 1px 0;
+        border-radius: 3px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        background: transparent;
+        color: #ccc;
+        font-size: 11px;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 4px;
+        align-items: center;
+        text-align: left;
+      }
+      .waypoint-item:hover { background: #3a3a3a; }
+      .waypoint-item[data-selected="true"] {
+        background: #0e3a5c;
+        border-color: #0e639c;
+      }
+      .waypoint-item[data-task-point="true"] { border-left: 3px solid #e8a020; }
+      .wp-index { color: #888; }
+      .wp-id {
+        color: #9cdcfe;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .wp-speed {
+        color: #4ec9b0;
+        font-size: 10px;
+      }
+      .wp-task {
+        grid-column: 2 / 4;
+        color: #ce9178;
+        font-size: 10px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .composer-map-panel {
+        min-height: 0;
+        overflow: hidden;
+        position: relative;
+        background: #111;
+      }
+      #composer-canvas {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        display: block;
+        background: #111;
+      }
+      .composer-editor {
+        width: var(--editor-width, 360px);
+        background: #252525;
+        border-left: 1px solid #444;
+        display: grid;
+        grid-template-columns: 8px 1fr;
+        grid-template-rows: auto 1fr;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .composer-editor[data-collapsed="true"] {
+        width: 42px;
+        grid-template-columns: 1fr;
+      }
+      .composer-editor[data-collapsed="true"] .composer-editor-body,
+      .composer-editor[data-collapsed="true"] .composer-resizer {
+        display: none;
+      }
+      .composer-editor > .composer-icon-button {
+        grid-column: 1 / -1;
+        margin: 6px;
+      }
+      .composer-resizer {
+        grid-row: 2;
+        width: 8px;
+        cursor: ew-resize;
+        background: #202020;
+        border-right: 1px solid #444;
+      }
+      .composer-editor-body {
+        grid-row: 2;
+        overflow: auto;
+        padding: 8px;
+        display: grid;
+        gap: 8px;
+        align-content: start;
+      }
+      .composer-editor-body h2 {
+        margin: 0;
+        font-size: 12px;
+        color: #9cdcfe;
+      }
+      .composer-field-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .composer-checks {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .composer-checks label {
+        display: flex;
+        gap: 3px;
+        align-items: center;
+        color: #aaa;
+        font-size: 11px;
+      }
+      .composer-muted {
+        color: #888;
+        font-size: 11px;
+        line-height: 1.4;
+        margin: 0;
+      }
+      .picker-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.6);
+        align-items: center;
+        justify-content: center;
+      }
+      .picker-overlay.visible { display: flex; }
+      .picker-box {
+        width: 640px;
+        max-width: 92vw;
+        max-height: 72vh;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #555;
+        border-radius: 5px;
+        background: #2d2d2d;
+        overflow: hidden;
+      }
+      .picker-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-bottom: 1px solid #444;
+      }
+      .picker-header span {
+        flex: 1;
+        min-width: 0;
+        color: #9cdcfe;
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .picker-list {
+        flex: 1;
+        overflow: auto;
+        padding: 4px;
+      }
+      .picker-entry {
+        padding: 4px 8px;
+        border-radius: 3px;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #666;
+      }
+      .picker-entry[data-clickable="true"] {
+        cursor: pointer;
+        color: #9cdcfe;
+      }
+      .picker-entry[data-dir="true"] { color: #dcdcaa; }
+      .picker-entry[data-clickable="true"]:hover { background: #3a3a3a; }
+      @media (max-width: 1160px) {
+        body { overflow: auto; height: auto; }
+        .composer-app {
+          height: auto;
+          min-height: 100vh;
+          grid-template-rows: auto auto auto auto;
+        }
+        .file-panel-body,
+        .composer-layout {
+          grid-template-columns: 1fr;
+        }
+        .composer-map-panel { min-height: 620px; }
+        .composer-editor,
+        .composer-editor[data-collapsed="true"] {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="picker-overlay" class="picker-overlay">
+      <div class="picker-box">
+        <div class="picker-header">
+          <strong id="picker-title">选择文件</strong>
+          <span id="picker-cwd"></span>
+          <button type="button" id="picker-select-dir">选择当前目录</button>
+          <button type="button" id="picker-up">上一级</button>
+          <button type="button" id="picker-close">关闭</button>
+        </div>
+        <div id="picker-list" class="picker-list"></div>
+      </div>
+    </div>
+
+    <main class="composer-app">
+      <header class="composer-topbar">
+        <h1 class="composer-title">Subtask Composer</h1>
+        <span class="composer-subtitle">单文件子任务地图编排</span>
+        <button type="button" id="toggle-file-panel">收起文件栏</button>
+        <span class="topbar-spacer"></span>
+        <span id="composer-status" class="composer-status" data-error="false">准备就绪</span>
+        <a class="toolbar-link" href="/">返回导航页</a>
+      </header>
+
+      <section id="file-panel" class="file-panel" data-collapsed="false">
+        <div class="file-panel-header">
+          <span class="file-panel-title">文件与地图</span>
+          <span id="file-panel-summary" class="file-panel-summary">未打开子任务</span>
+        </div>
+        <div class="file-panel-body">
+          <label class="composer-field">
+            <span>子任务 JSON</span>
+            <input id="subtask-path" type="text" placeholder="/opt/ry/data/tasks/multi_tasks/.../9_2.json">
+          </label>
+          <label class="composer-field">
+            <span>地图 YAML</span>
+            <input id="map-path" type="text" placeholder="/opt/ry/data/maps/.../map.yaml">
+          </label>
+          <label class="composer-field">
+            <span>子任务名称</span>
+            <input id="subtask-name" type="text" value="new_subtask">
+          </label>
+          <label class="composer-field">
+            <span>PCD URL</span>
+            <input id="pcd-url" type="text" placeholder="">
+          </label>
+          <div class="composer-actions">
+            <button type="button" id="browse-subtask">浏览任务</button>
+            <button type="button" id="browse-map">浏览地图</button>
+            <button type="button" id="load-subtask">打开</button>
+            <button type="button" id="new-subtask">新建</button>
+            <button type="button" id="load-map">加载地图</button>
+            <button type="button" id="save-subtask">保存</button>
+            <button type="button" id="save-subtask-as">另存为</button>
+            <button type="button" id="build-return">生成返程</button>
+          </div>
+        </div>
+      </section>
+
+      <nav id="subtask-tabs" class="subtask-tabs" data-visible="false" aria-label="子任务标签栏"></nav>
+
+      <section class="composer-layout">
+        <aside class="composer-sidebar">
+          <div class="panel-header"><span>路点列表</span></div>
+          <div class="tool-row" role="group" aria-label="编辑工具">
+            <button type="button" class="composer-icon-button" data-tool="select" data-active="true">选择</button>
+            <button type="button" class="composer-icon-button" data-tool="add">加点</button>
+            <button type="button" class="composer-icon-button" data-tool="insert">插点</button>
+            <button type="button" class="composer-icon-button" data-tool="move">移动</button>
+            <button type="button" class="composer-icon-button" data-tool="rotate">朝向</button>
+            <button type="button" class="composer-icon-button" data-tool="delete">删除</button>
+          </div>
+          <div class="offset-row">
+            <label>
+              <span>dx</span>
+              <input id="offset-x" type="number" step="0.01" value="0">
+            </label>
+            <label>
+              <span>dy</span>
+              <input id="offset-y" type="number" step="0.01" value="0">
+            </label>
+            <button type="button" id="apply-offset">应用偏移</button>
+          </div>
+          <div id="waypoint-list" class="waypoint-list"></div>
+        </aside>
+
+        <article class="composer-map-panel">
+          <canvas id="composer-canvas"></canvas>
+        </article>
+
+        <aside id="composer-editor" class="composer-editor" data-collapsed="false">
+          <button type="button" id="toggle-editor" class="composer-icon-button">收起</button>
+          <div id="editor-resizer" class="composer-resizer" title="拖动调整面板宽度"></div>
+          <div class="composer-editor-body">
+            <h2 id="editor-title">未选择路点</h2>
+            <div class="composer-field-grid">
+              <label class="composer-field">
+                <span>waypoint_id</span>
+                <input id="field-waypoint-id" type="text">
+              </label>
+              <label class="composer-field">
+                <span>speed_mode</span>
+                <select id="field-speed-mode"></select>
+              </label>
+              <label class="composer-field">
+                <span>X</span>
+                <input id="field-x" type="number" step="0.001">
+              </label>
+              <label class="composer-field">
+                <span>Y</span>
+                <input id="field-y" type="number" step="0.001">
+              </label>
+              <label class="composer-field">
+                <span>Z</span>
+                <input id="field-z" type="number" step="0.001">
+              </label>
+              <label class="composer-field">
+                <span>Yaw</span>
+                <input id="field-yaw" type="number" step="0.001">
+              </label>
+            </div>
+            <label class="composer-field">
+              <span>waypoint_task_id</span>
+              <select id="field-waypoint-task-id"></select>
+            </label>
+            <div class="composer-checks">
+              <label><input id="field-is-task-point" type="checkbox"> is_task_point</label>
+              <label><input id="field-is-single-point" type="checkbox"> is_single_point</label>
+              <label><input id="field-is-backward" type="checkbox"> is_backward</label>
+              <label><input id="field-change-loc" type="checkbox"> change_loc</label>
+            </div>
+            <div class="composer-actions">
+              <button type="button" id="apply-point">应用点属性</button>
+              <button type="button" id="flip-yaw">翻转朝向</button>
+            </div>
+            <p class="composer-muted">中键或右键拖动画布，滚轮缩放。生成返程时保留几何和 speed_mode，清空 waypoint_task_id。</p>
+          </div>
+        </aside>
+      </section>
+
+    </main>
+
+    <script type="module" src="/hub-static/subtask-composer.js"></script>
+  </body>
+</html>
