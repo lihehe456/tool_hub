@@ -107,7 +107,7 @@
       }
       .file-panel-body {
         display: grid;
-        grid-template-columns: minmax(260px, 1.4fr) minmax(240px, 1.2fr) minmax(150px, 0.6fr) minmax(150px, 0.6fr) auto;
+        grid-template-columns: minmax(260px, 1.4fr) minmax(240px, 1.2fr) minmax(150px, 0.6fr) minmax(150px, 0.6fr) minmax(240px, 1fr) minmax(240px, 1fr) auto;
         gap: 6px;
         align-items: end;
         padding: 6px 8px 8px;
@@ -464,12 +464,21 @@
             <span>PCD URL</span>
             <input id="pcd-url" type="text" placeholder="">
           </label>
+          <label class="composer-field">
+            <span>路点任务路径</span>
+            <input id="waypoint-tasks-path" type="text" placeholder="/opt/ry/data/waypoints_attributes/waypoint_tasks">
+          </label>
+          <label class="composer-field">
+            <span>速度模式路径</span>
+            <input id="speed-modes-path" type="text" placeholder="/opt/ry/data/waypoints_attributes/speed_modes">
+          </label>
           <div class="composer-actions">
             <button type="button" id="browse-subtask">浏览任务</button>
             <button type="button" id="browse-map">浏览地图</button>
             <button type="button" id="load-subtask">打开</button>
             <button type="button" id="new-subtask">新建</button>
             <button type="button" id="load-map">加载地图</button>
+            <button type="button" id="refresh-attributes">刷新属性</button>
             <button type="button" id="save-subtask">保存</button>
             <button type="button" id="save-subtask-as">另存为</button>
             <button type="button" id="build-return">生成返程</button>

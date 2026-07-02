@@ -419,11 +419,19 @@ def create_app(config=None):
     @app.get("/subtask-composer/api/runtime_config")
     def subtask_composer_runtime_config():
         attrs_dir = Path(app.config["ATTRS_DIR"])
+        waypoint_tasks_path = app.config.get("SUBTASK_COMPOSER_WAYPOINT_TASKS_PATH")
+        speed_modes_path = app.config.get("SUBTASK_COMPOSER_SPEED_MODES_PATH")
         return jsonify(
             {
                 "default_root": str(DEFAULT_USER_BROWSE_ROOT),
                 "default_waypoint_tasks_path": str(attrs_dir / "waypoint_tasks"),
                 "default_speed_modes_path": str(attrs_dir / "speed_modes"),
+                "waypoint_tasks_path": str(Path(waypoint_tasks_path).expanduser().resolve())
+                if waypoint_tasks_path
+                else "",
+                "speed_modes_path": str(Path(speed_modes_path).expanduser().resolve())
+                if speed_modes_path
+                else "",
             }
         )
 
@@ -509,7 +517,10 @@ def create_app(config=None):
             target = resolve_user_path(payload.get("path", ""), "path")
             if "subtasks" in payload or "task_group" in payload:
                 saved_path = save_task_document_file(target, payload)
-                document_payload = load_task_document_file(saved_path)
+                document_payload = load_task_document_file(
+                    saved_path,
+                    active_subtask_index=payload.get("active_subtask_index"),
+                )
                 active_index = document_payload["active_subtask_index"]
                 active_subtask = (
                     document_payload["subtasks"][active_index]

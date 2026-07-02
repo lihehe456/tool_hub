@@ -169,6 +169,8 @@ export function createSubtaskComposerInitialState() {
     subtaskDocuments: [],
     subtaskNames: [],
     activeSubtaskIndex: 0,
+    waypointTasksPath: "",
+    speedModesPath: "",
     document: null,
     selectedIndex: -1,
     dirty: false,
@@ -259,6 +261,8 @@ export function reduceSubtaskComposerState(state, action) {
         subtaskDocuments: documents,
         subtaskNames: action.subtaskNames || subtaskNamesFromDocuments(documents),
         activeSubtaskIndex: activeIndex,
+        waypointTasksPath: action.waypointTasksPath ?? state.waypointTasksPath,
+        speedModesPath: action.speedModesPath ?? state.speedModesPath,
         document,
         selectedIndex: document?.anchors?.length ? 0 : -1,
         dirty: action.dirty ?? false,
@@ -273,6 +277,8 @@ export function reduceSubtaskComposerState(state, action) {
         subtaskDocuments: [withoutHistory(clone(action.document))],
         subtaskNames: [action.document?.meta?.subtask_name || "subtask"],
         activeSubtaskIndex: 0,
+        waypointTasksPath: state.waypointTasksPath,
+        speedModesPath: state.speedModesPath,
         document: withoutHistory(clone(action.document)),
         selectedIndex: action.document?.anchors?.length ? 0 : -1,
         dirty: action.dirty ?? false,
@@ -281,6 +287,12 @@ export function reduceSubtaskComposerState(state, action) {
       return {
         ...state,
         activeTool: action.tool,
+      };
+    case "SET_ATTRIBUTE_PATHS":
+      return {
+        ...state,
+        waypointTasksPath: action.waypointTasksPath ?? state.waypointTasksPath,
+        speedModesPath: action.speedModesPath ?? state.speedModesPath,
       };
     case "SET_STATUS":
       return {
@@ -421,6 +433,30 @@ export function reduceSubtaskComposerState(state, action) {
         anchor.waypoint_id = action.patch.waypoint_id;
         delete anchor.task.waypoint_id;
       }
+      return withDocumentHistory(state, document);
+    }
+    case "APPLY_SELECTED_POINT_EDIT": {
+      if (!state.document?.anchors?.[state.selectedIndex]) {
+        return state;
+      }
+      const document = clone(state.document);
+      const anchor = document.anchors[state.selectedIndex];
+      const patch = action.patch || {};
+      anchor.x = Number(patch.x || 0);
+      anchor.y = Number(patch.y || 0);
+      anchor.z = Number(patch.z || 0);
+      anchor.yaw = Number(patch.yaw || 0);
+      anchor.waypoint_id = String(patch.waypoint_id || "");
+      anchor.task = {
+        ...defaultTaskAttrs(),
+        ...(anchor.task || {}),
+        speed_mode: String(patch.speed_mode || "task_point"),
+        waypoint_task_id: String(patch.waypoint_task_id || ""),
+        is_task_point: Boolean(patch.is_task_point),
+        is_single_point: Boolean(patch.is_single_point),
+        is_backward: Boolean(patch.is_backward),
+      };
+      rebuildSegments(document);
       return withDocumentHistory(state, document);
     }
     case "UNDO": {

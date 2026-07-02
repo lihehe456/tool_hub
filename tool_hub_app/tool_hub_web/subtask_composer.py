@@ -12,6 +12,13 @@ DEFAULT_WAYPOINT_FIELDS = {
 }
 
 
+def clamp_active_subtask_index(subtasks, active_subtask_index=None):
+    if not subtasks:
+        return -1
+    requested_index = 0 if active_subtask_index is None else int(active_subtask_index)
+    return max(0, min(requested_index, len(subtasks) - 1))
+
+
 def create_empty_subtask(subtask_name, map_url="", pcd_url="", change_loc=False):
     return {
         "change_loc": bool(change_loc),
@@ -90,7 +97,7 @@ def normalize_subtask_from_group(document, index=0):
     )
 
 
-def normalize_task_group(document):
+def normalize_task_group(document, active_subtask_index=None):
     if not isinstance(document, dict):
         raise ValueError("task group document must be an object")
     subtasks = document.get("subtasks", [])
@@ -104,15 +111,15 @@ def normalize_task_group(document):
             normalize_subtask_from_group(subtask, index)
             for index, subtask in enumerate(subtasks)
         ],
-        "active_subtask_index": 0 if subtasks else -1,
+        "active_subtask_index": clamp_active_subtask_index(subtasks, active_subtask_index),
     }
 
 
-def normalize_task_document(document):
+def normalize_task_document(document, active_subtask_index=None):
     if not isinstance(document, dict):
         raise ValueError("task document must be an object")
     if "subtasks" in document or "task_group_name" in document:
-        return normalize_task_group(document)
+        return normalize_task_group(document, active_subtask_index=active_subtask_index)
     subtask = normalize_subtask(document)
     return {
         "document_type": "subtask",
@@ -129,11 +136,14 @@ def load_subtask_file(path):
     return normalize_subtask(json.loads(source.read_text(encoding="utf-8")))
 
 
-def load_task_document_file(path):
+def load_task_document_file(path, active_subtask_index=None):
     source = Path(path).expanduser().resolve()
     if not source.is_file():
         raise ValueError(f"Task file not found: {source}")
-    return normalize_task_document(json.loads(source.read_text(encoding="utf-8")))
+    return normalize_task_document(
+        json.loads(source.read_text(encoding="utf-8")),
+        active_subtask_index=active_subtask_index,
+    )
 
 
 def save_subtask_file(path, document):

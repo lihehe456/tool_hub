@@ -69,6 +69,40 @@ test("subtaskDocumentsFromPayload converts task group subtasks into switchable d
 });
 
 
+test("SET_ATTRIBUTE_PATHS stores configurable attribute roots", () => {
+  const next = reduceSubtaskComposerState(createSubtaskComposerInitialState(), {
+    type: "SET_ATTRIBUTE_PATHS",
+    waypointTasksPath: "/attrs/waypoint_tasks",
+    speedModesPath: "/attrs/speed_modes",
+  });
+
+  assert.equal(next.waypointTasksPath, "/attrs/waypoint_tasks");
+  assert.equal(next.speedModesPath, "/attrs/speed_modes");
+});
+
+
+test("SET_TASK_DOCUMENT preserves configured attribute roots", () => {
+  const state = {
+    ...createSubtaskComposerInitialState(),
+    waypointTasksPath: "/attrs/waypoint_tasks",
+    speedModesPath: "/attrs/speed_modes",
+  };
+  const docs = subtaskDocumentsFromPayload({
+    document_type: "subtask",
+    subtask: demoSubtask(),
+    active_subtask_index: 0,
+  });
+
+  const next = reduceSubtaskComposerState(state, {
+    type: "SET_TASK_DOCUMENT",
+    ...docs,
+  });
+
+  assert.equal(next.waypointTasksPath, "/attrs/waypoint_tasks");
+  assert.equal(next.speedModesPath, "/attrs/speed_modes");
+});
+
+
 test("SELECT_SUBTASK stores current edits before switching documents", () => {
   const docs = subtaskDocumentsFromPayload({
     document_type: "task_group",
@@ -230,6 +264,43 @@ test("UPDATE_SELECTED_TASK_ATTR changes only task metadata", () => {
   assert.equal(next.document.anchors[0].x, 1);
   assert.equal(next.document.anchors[0].task.speed_mode, "backward");
   assert.equal(next.document.anchors[0].task.waypoint_task_id, "close_door_back");
+});
+
+
+test("APPLY_SELECTED_POINT_EDIT updates geometry and task metadata atomically", () => {
+  const state = {
+    ...createSubtaskComposerInitialState(),
+    document: documentFromSubtask(demoSubtask()),
+    selectedIndex: 0,
+  };
+
+  const next = reduceSubtaskComposerState(state, {
+    type: "APPLY_SELECTED_POINT_EDIT",
+    patch: {
+      waypoint_id: "indoor_edited",
+      x: 9,
+      y: 8,
+      z: 0.3,
+      yaw: 1.25,
+      speed_mode: "elevator_in",
+      waypoint_task_id: "elevator_in_1_2",
+      is_task_point: true,
+      is_single_point: false,
+      is_backward: true,
+    },
+  });
+
+  assert.equal(next.document.anchors[0].waypoint_id, "indoor_edited");
+  assert.equal(next.document.anchors[0].x, 9);
+  assert.equal(next.document.anchors[0].y, 8);
+  assert.equal(next.document.anchors[0].z, 0.3);
+  assert.equal(next.document.anchors[0].yaw, 1.25);
+  assert.equal(next.document.anchors[0].task.speed_mode, "elevator_in");
+  assert.equal(next.document.anchors[0].task.waypoint_task_id, "elevator_in_1_2");
+  assert.equal(next.document.anchors[0].task.is_task_point, true);
+  assert.equal(next.document.anchors[0].task.is_single_point, false);
+  assert.equal(next.document.anchors[0].task.is_backward, true);
+  assert.equal(next.dirty, true);
 });
 
 

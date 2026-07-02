@@ -6,6 +6,7 @@ import {
   subtaskFromDocument,
   taskPayloadFromState,
 } from "/hub-static/subtask-composer-state.js";
+import { shouldResizeCanvasForAction } from "/hub-static/subtask-composer-layout.js";
 
 let state = {
   defaultRoot: "/",
@@ -24,6 +25,8 @@ const el = {
   mapPath: document.querySelector("#map-path"),
   subtaskName: document.querySelector("#subtask-name"),
   pcdUrl: document.querySelector("#pcd-url"),
+  waypointTasksPath: document.querySelector("#waypoint-tasks-path"),
+  speedModesPath: document.querySelector("#speed-modes-path"),
   status: document.querySelector("#composer-status"),
   filePanel: document.querySelector("#file-panel"),
   filePanelSummary: document.querySelector("#file-panel-summary"),
@@ -37,6 +40,7 @@ const el = {
   loadSubtask: document.querySelector("#load-subtask"),
   newSubtask: document.querySelector("#new-subtask"),
   loadMap: document.querySelector("#load-map"),
+  refreshAttributes: document.querySelector("#refresh-attributes"),
   saveSubtask: document.querySelector("#save-subtask"),
   saveSubtaskAs: document.querySelector("#save-subtask-as"),
   buildReturn: document.querySelector("#build-return"),
@@ -97,9 +101,24 @@ const pathCanvas = new PathCanvas(el.canvas, {
   },
 });
 
+let resizeFrame = 0;
+
+function scheduleCanvasResize() {
+  if (resizeFrame) {
+    return;
+  }
+  resizeFrame = window.requestAnimationFrame(() => {
+    resizeFrame = 0;
+    pathCanvas.resize();
+  });
+}
+
 function dispatch(action) {
   state = reduceSubtaskComposerState(state, action);
   render();
+  if (shouldResizeCanvasForAction(action)) {
+    scheduleCanvasResize();
+  }
 }
 
 function setStatus(message, error = false) {
@@ -181,6 +200,8 @@ function syncMetaInputs() {
   el.mapPath.value = meta.map_url || el.mapPath.value || "";
   el.subtaskName.value = meta.subtask_name || el.subtaskName.value || "new_subtask";
   el.pcdUrl.value = meta.pcd_url || "";
+  el.waypointTasksPath.value = state.waypointTasksPath || state.defaultWaypointTasksPath || "";
+  el.speedModesPath.value = state.speedModesPath || state.defaultSpeedModesPath || "";
   el.changeLoc.checked = Boolean(meta.change_loc);
   const filePanelCollapsed = Boolean(state.filePanel?.collapsed);
   el.filePanel.dataset.collapsed = filePanelCollapsed ? "true" : "false";
@@ -347,6 +368,8 @@ async function loadSubtask() {
   dispatch({
     type: "SET_TASK_DOCUMENT",
     taskPath: payload.path,
+    waypointTasksPath: state.waypointTasksPath,
+    speedModesPath: state.speedModesPath,
     ...documents,
   });
   setStatus(
@@ -369,6 +392,8 @@ async function newSubtask() {
   dispatch({
     type: "SET_TASK_DOCUMENT",
     taskPath: "",
+    waypointTasksPath: state.waypointTasksPath,
+    speedModesPath: state.speedModesPath,
     ...subtaskDocumentsFromPayload({
       document_type: "subtask",
       subtask: payload.subtask,
@@ -390,6 +415,22 @@ function readMetaInputs(fallbackMeta = {}) {
     pcd_url: el.pcdUrl.value.trim(),
     change_loc: el.changeLoc.checked,
   };
+}
+
+function readAttributePathInputs() {
+  return {
+    waypointTasksPath: el.waypointTasksPath.value.trim(),
+    speedModesPath: el.speedModesPath.value.trim(),
+  };
+}
+
+function applyAttributePathInputs() {
+  const nextPaths = readAttributePathInputs();
+  dispatch({
+    type: "SET_ATTRIBUTE_PATHS",
+    ...nextPaths,
+  });
+  return nextPaths;
 }
 
 function documentWithCurrentMeta() {
@@ -474,23 +515,13 @@ function applyPointEdit() {
     return;
   }
   dispatch({
-    type: "MOVE_ANCHOR",
-    index,
-    point: {
+    type: "APPLY_SELECTED_POINT_EDIT",
+    patch: {
+      waypoint_id: el.waypointId.value.trim(),
       x: Number(el.fieldX.value),
       y: Number(el.fieldY.value),
       z: Number(el.fieldZ.value),
-    },
-  });
-  dispatch({
-    type: "SET_ANCHOR_YAW",
-    index,
-    yaw: Number(el.fieldYaw.value),
-  });
-  dispatch({
-    type: "UPDATE_SELECTED_TASK_ATTR",
-    patch: {
-      waypoint_id: el.waypointId.value.trim(),
+      yaw: Number(el.fieldYaw.value),
       speed_mode: el.speedMode.value.trim() || "task_point",
       waypoint_task_id: el.isTaskPoint.checked ? el.waypointTaskId.value.trim() : "",
       is_task_point: el.isTaskPoint.checked,
@@ -502,12 +533,13 @@ function applyPointEdit() {
 }
 
 async function loadAttributes() {
+  const nextPaths = applyAttributePathInputs();
   const params = new URLSearchParams();
-  if (state.defaultWaypointTasksPath) {
-    params.set("waypoint_tasks_path", state.defaultWaypointTasksPath);
+  if (nextPaths.waypointTasksPath) {
+    params.set("waypoint_tasks_path", nextPaths.waypointTasksPath);
   }
-  if (state.defaultSpeedModesPath) {
-    params.set("speed_modes_path", state.defaultSpeedModesPath);
+  if (nextPaths.speedModesPath) {
+    params.set("speed_modes_path", nextPaths.speedModesPath);
   }
   const query = params.toString();
   const response = await fetch(`/subtask-composer/api/attributes${query ? `?${query}` : ""}`);
@@ -617,6 +649,8 @@ async function init() {
   state.browseCwd = state.defaultRoot;
   state.defaultWaypointTasksPath = config.default_waypoint_tasks_path || "";
   state.defaultSpeedModesPath = config.default_speed_modes_path || "";
+  state.waypointTasksPath = config.waypoint_tasks_path || state.defaultWaypointTasksPath || "";
+  state.speedModesPath = config.speed_modes_path || state.defaultSpeedModesPath || "";
   el.subtaskPath.value = `${state.defaultRoot}/data/tasks/multi_tasks`;
   installResizer();
   pathCanvas.resize();
@@ -632,6 +666,11 @@ el.browseMap.addEventListener("click", () => openPicker("map"));
 el.loadSubtask.addEventListener("click", () => runButton(el.loadSubtask, { pending: "打开中...", success: "已打开", failure: "打开失败" }, loadSubtask));
 el.newSubtask.addEventListener("click", () => runButton(el.newSubtask, { pending: "新建中...", success: "已新建", failure: "新建失败" }, newSubtask));
 el.loadMap.addEventListener("click", () => runButton(el.loadMap, { pending: "加载中...", success: "已加载", failure: "加载失败" }, () => loadMap(el.mapPath.value.trim())));
+el.refreshAttributes.addEventListener("click", () => runButton(
+  el.refreshAttributes,
+  { pending: "刷新中...", success: "已刷新", failure: "刷新失败" },
+  loadAttributes,
+));
 el.saveSubtask.addEventListener("click", () => runButton(el.saveSubtask, { pending: "保存中...", success: "已保存", failure: "保存失败" }, () => saveSubtask()));
 el.saveSubtaskAs.addEventListener("click", () => runButton(el.saveSubtaskAs, { pending: "另存中...", success: "已保存", failure: "另存失败" }, saveSubtaskAs));
 el.buildReturn.addEventListener("click", () => runButton(el.buildReturn, { pending: "生成中...", success: "已生成", failure: "生成失败" }, buildReturnSubtask));
@@ -653,6 +692,8 @@ el.isTaskPoint.addEventListener("change", () => {
     el.waypointTaskId.value = "";
   }
 });
+el.waypointTasksPath.addEventListener("change", () => applyAttributePathInputs());
+el.speedModesPath.addEventListener("change", () => applyAttributePathInputs());
 el.applyOffset.addEventListener("click", applyOffset);
 el.toggleEditor.addEventListener("click", () => dispatch({ type: "TOGGLE_EDITOR_PANEL" }));
 el.toggleFilePanel.addEventListener("click", () => dispatch({ type: "TOGGLE_FILE_PANEL" }));

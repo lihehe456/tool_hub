@@ -121,6 +121,19 @@ def test_subtask_composer_runtime_config_uses_task_editor_attribute_defaults(cli
     assert payload["default_speed_modes_path"].endswith("/waypoints_attributes/speed_modes")
 
 
+def test_subtask_composer_runtime_config_can_be_overridden(client, tmp_path):
+    app = client.application
+    app.config["SUBTASK_COMPOSER_WAYPOINT_TASKS_PATH"] = str(tmp_path / "waypoint_tasks")
+    app.config["SUBTASK_COMPOSER_SPEED_MODES_PATH"] = str(tmp_path / "speed_modes")
+
+    response = client.get("/subtask-composer/api/runtime_config")
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["waypoint_tasks_path"] == str(tmp_path / "waypoint_tasks")
+    assert payload["speed_modes_path"] == str(tmp_path / "speed_modes")
+
+
 def test_subtask_composer_attributes_load_from_custom_paths(client, tmp_path):
     waypoint_tasks_dir = tmp_path / "waypoint_tasks"
     speed_modes_dir = tmp_path / "speed_modes"
@@ -411,6 +424,56 @@ def test_subtask_composer_loads_and_saves_task_group_documents(client, tmp_path)
     assert saved["selected_subtask_ids"] == ["go"]
     assert saved["subtasks"][0]["id"] == "go"
     assert saved["subtasks"][0]["subtask_name"] == "go_edited"
+
+
+def test_subtask_composer_save_task_group_preserves_active_subtask_index(client, tmp_path):
+    task_path = tmp_path / "group.json"
+    saved_path = tmp_path / "group_saved.json"
+    task_path.write_text(
+        """
+{
+  "task_group_name": "delivery",
+  "selected_subtask_ids": ["go"],
+  "subtasks": [
+    {
+      "id": "go",
+      "subtask_name": "go",
+      "map_url": "/maps/go.yaml",
+      "waypoints": []
+    },
+    {
+      "id": "back",
+      "subtask_name": "back",
+      "map_url": "/maps/back.yaml",
+      "waypoints": []
+    }
+  ]
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    load_response = client.post("/subtask-composer/api/load", json={"path": str(task_path)})
+    payload = load_response.get_json()
+    payload["subtasks"][1]["subtask_name"] = "back_edited"
+    payload["active_subtask_index"] = 1
+    save_response = client.post(
+        "/subtask-composer/api/save",
+        json={
+            "path": str(saved_path),
+            "document_type": payload["document_type"],
+            "task_group": payload["task_group"],
+            "subtasks": payload["subtasks"],
+            "active_subtask_index": payload["active_subtask_index"],
+        },
+    )
+    saved_payload = save_response.get_json()
+
+    assert load_response.status_code == 200
+    assert save_response.status_code == 200
+    assert saved_payload["document_type"] == "task_group"
+    assert saved_payload["active_subtask_index"] == 1
+    assert saved_payload["subtask"]["subtask_name"] == "back_edited"
 
 
 def test_pcd_to_map_preview_and_export_include_same_directory_trajectory(client, tmp_path):

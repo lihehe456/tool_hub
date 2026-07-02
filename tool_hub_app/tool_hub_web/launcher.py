@@ -39,6 +39,12 @@ def build_runtime_config(args):
         "WAYPOINT_TASKS_ROOT": resolve_optional_path(args.waypoint_tasks_root)
         or str(default_waypoint_tasks_root()),
         "ATTRS_DIR": resolve_optional_path(args.attrs_dir) or str(default_waypoint_attrs_root()),
+        "SUBTASK_COMPOSER_WAYPOINT_TASKS_PATH": resolve_optional_path(
+            args.subtask_composer_waypoint_tasks_path
+        ),
+        "SUBTASK_COMPOSER_SPEED_MODES_PATH": resolve_optional_path(
+            args.subtask_composer_speed_modes_path
+        ),
         "TASK_EDITOR_DEFAULT_BROWSE_ROOT": resolve_optional_path(args.tasks_root)
         or str(default_task_editor_browse_root()),
     }
@@ -54,6 +60,14 @@ def parse_args(argv=None):
     parser.add_argument("--tasks-root", help="Default browse root for task-group JSON files")
     parser.add_argument("--waypoint-tasks-root", help="Default browse root for waypoint task XML files")
     parser.add_argument("--attrs-dir", help="Directory containing waypoints_attributes resources")
+    parser.add_argument(
+        "--subtask-composer-waypoint-tasks-path",
+        help="Override waypoint task XML directory used by Subtask Composer",
+    )
+    parser.add_argument(
+        "--subtask-composer-speed-modes-path",
+        help="Override speed mode XML directory used by Subtask Composer",
+    )
     return parser.parse_args(argv)
 
 
