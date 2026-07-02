@@ -49,6 +49,11 @@ try:
         project_trajectory_to_map,
         render_preview_with_trajectory,
     )
+    from tool_hub_web.pcd_chunker import (
+        PcdChunkOptions,
+        build_chunk_preview,
+        export_chunked_map,
+    )
     from tool_hub_web.subtask_composer import (
         build_return_subtask,
         create_empty_subtask,
@@ -89,6 +94,11 @@ except ModuleNotFoundError:
         find_trajectory_pcd,
         project_trajectory_to_map,
         render_preview_with_trajectory,
+    )
+    from tool_hub_web.pcd_chunker import (
+        PcdChunkOptions,
+        build_chunk_preview,
+        export_chunked_map,
     )
     from tool_hub_web.subtask_composer import (
         build_return_subtask,
@@ -332,6 +342,11 @@ def create_app(config=None):
             return None
         return int(value)
 
+    def parse_optional_float(value):
+        if value in (None, ""):
+            return None
+        return float(value)
+
     def pcd_options_from_payload(payload, slice_payload):
         transform = payload.get("odom_to_lidar_odom") or [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         return PcdToMapOptions(
@@ -342,6 +357,16 @@ def create_app(config=None):
             min_neighbors=int(payload.get("min_neighbors", 10)),
             flag_pass_through=bool(payload.get("flag_pass_through", False)),
             odom_to_lidar_odom=tuple(float(value) for value in transform),
+        )
+
+    def pcd_chunker_options_from_payload(payload):
+        return PcdChunkOptions(
+            chunk_size=float(payload.get("chunk_size", 100.0)),
+            voxel_size=parse_optional_float(payload.get("voxel_size")),
+            start_x=float(payload.get("start_x", 0.0)),
+            start_y=float(payload.get("start_y", 0.0)),
+            start_z=float(payload.get("start_z", 0.0)),
+            force=bool(payload.get("force", False)),
         )
 
     @app.get("/hub-static/<path:filename>")
@@ -375,6 +400,10 @@ def create_app(config=None):
     @app.get("/pcd-to-map")
     def pcd_to_map_page():
         return send_from_directory(STATIC_DIR, "pcd-to-map.html")
+
+    @app.get("/pcd-chunker")
+    def pcd_chunker_page():
+        return send_from_directory(STATIC_DIR, "pcd-chunker.html")
 
     @app.get("/subtask-composer")
     def subtask_composer_page():
@@ -414,6 +443,10 @@ def create_app(config=None):
 
     @app.get("/pcd-to-map/api/runtime_config")
     def pcd_to_map_runtime_config():
+        return jsonify({"default_root": str(DEFAULT_USER_BROWSE_ROOT)})
+
+    @app.get("/pcd-chunker/api/runtime_config")
+    def pcd_chunker_runtime_config():
         return jsonify({"default_root": str(DEFAULT_USER_BROWSE_ROOT)})
 
     @app.get("/subtask-composer/api/runtime_config")
@@ -631,6 +664,44 @@ def create_app(config=None):
             return jsonify(browse_absolute_path(raw_path, DEFAULT_USER_BROWSE_ROOT))
         except ValueError as exc:
             return json_error(str(exc), 400)
+
+    @app.post("/pcd-chunker/api/browse")
+    def pcd_chunker_browse():
+        raw_path = (request.get_json(silent=True) or {}).get("path", str(DEFAULT_USER_BROWSE_ROOT))
+        try:
+            return jsonify(browse_absolute_path(raw_path, DEFAULT_USER_BROWSE_ROOT))
+        except ValueError as exc:
+            return json_error(str(exc), 400)
+
+    @app.post("/pcd-chunker/api/preview")
+    def pcd_chunker_preview():
+        payload = request.get_json(silent=True) or {}
+        try:
+            pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+            output_dir = resolve_user_path(payload.get("output_dir", ""), "output_dir")
+            preview = build_chunk_preview(
+                pcd_path,
+                output_dir,
+                pcd_chunker_options_from_payload(payload),
+            )
+        except (ValueError, TypeError, RuntimeError) as exc:
+            return json_error(str(exc), 400)
+        return jsonify({"ok": True, "preview": preview.to_dict()})
+
+    @app.post("/pcd-chunker/api/export")
+    def pcd_chunker_export():
+        payload = request.get_json(silent=True) or {}
+        try:
+            pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+            output_dir = resolve_user_path(payload.get("output_dir", ""), "output_dir")
+            preview = export_chunked_map(
+                pcd_path,
+                output_dir,
+                pcd_chunker_options_from_payload(payload),
+            )
+        except (ValueError, TypeError, RuntimeError) as exc:
+            return json_error(str(exc), 400)
+        return jsonify({"ok": True, "preview": preview.to_dict()})
 
     @app.post("/virtual-wall-builder/api/save")
     def virtual_wall_builder_save():

@@ -29,6 +29,7 @@ RY-Robot Tool Hub
 - `Task Attribute Batch Generator`：按参考任务和模板 XML 批量生成路点任务属性 XML。
 - `Virtual Wall Builder`：加载 2D 地图并绘制虚拟墙，导出旧 `VirtualWallManager` 可加载的 YAML。
 - `PCD to 2D Map`：按 `pcd2pgm` 算法预览不同高度切片，并导出 `PGM/YAML` 地图。
+- `PCD Chunker`：将整张 `.pcd` 地图切分为 3D 定位算法直接使用的 `index.txt + {id}.pcd`。
 
 推荐主流程：
 
@@ -43,6 +44,7 @@ Waypoint Task Builder -> Task Editor
 Task Batch Generator -> Task Editor
 Task Attribute Batch Generator -> Task Editor
 PCD to 2D Map -> Path Editor / Virtual Wall Builder
+PCD Chunker -> 3D Localization Pipeline
 Virtual Wall Builder -> ROS VirtualWallManager
 ```
 
@@ -957,7 +959,73 @@ demo.workspace.json
 - 点云很大时，预览多个切片会耗时，建议先用 2 到 3 个候选高度范围。
 - 导出的地图可直接用于 Path Editor 或 Virtual Wall Builder 加载。
 
-## 13. Virtual Wall Builder
+## 13. PCD Chunker
+
+入口：
+
+```text
+/pcd-chunker
+```
+
+用途：
+
+- 读取整张 `.pcd` 点云地图。
+- 按 `chunk_size` 将点云归入 XY 网格块。
+- 可选按 `voxel_size` 对每个 chunk 降采样。
+- 预览分块数量、每块点数和 `index.txt` 内容。
+- 导出 `index.txt + {id}.pcd` 给 3D 定位算法直接使用。
+
+### 13.1 基本参数
+
+输入：
+
+- `输入 PCD`：绝对路径，例如 `/opt/ry/maps/demo/map.pcd`。
+- `输出目录`：导出 chunk 文件的目录。
+- `Chunk Size`：分块尺寸，单位米。
+- `Voxel Size`：可选降采样体素大小，留空表示不降采样。
+- `Start X / Y / Z`：写入 `index.txt` 中 `start` 行的起始平移。
+- `overwrite`：允许覆盖输出目录中已有的分块结果。
+
+### 13.2 预览分块
+
+点击：
+
+```text
+预览分块
+```
+
+页面会显示：
+
+- 输入点数
+- 输出点数
+- 分块数量
+- 每个 chunk 的网格坐标和点数
+- `index.txt` 预览内容
+
+### 13.3 导出分块
+
+确认预览后点击：
+
+```text
+导出分块
+```
+
+输出目录中会生成：
+
+```text
+index.txt
+0.pcd
+1.pcd
+...
+```
+
+注意事项：
+
+- 当前分块规则对齐参考 `convert_map.py` 的网格归类方式。
+- `index.txt` 中每个 chunk 的路径写为绝对路径。
+- 该工具服务于 3D 定位链路，不等同于 2D 导航地图生成。
+
+## 14. Virtual Wall Builder
 
 入口：
 
@@ -972,7 +1040,7 @@ demo.workspace.json
 - 在网页画布中绘制、选择、移动、插点和删除虚拟墙。
 - 导出旧 `VirtualWallManager` 可直接加载的 YAML。
 
-### 13.1 加载地图
+### 14.1 加载地图
 
 展开 `地图文件` 面板。
 
@@ -994,7 +1062,7 @@ demo.workspace.json
 - 地图建图原点。
 - 辅助网格。
 
-### 13.2 虚拟墙文件
+### 14.2 虚拟墙文件
 
 展开 `虚拟墙文件` 面板。
 
@@ -1021,7 +1089,7 @@ demo.workspace.json
 image_relative / segments
 ```
 
-### 13.3 选择模式
+### 14.3 选择模式
 
 默认进入选择模式。
 
@@ -1036,7 +1104,7 @@ image_relative / segments
 
 选择模式不会新增点，因此适合检查和微调。
 
-### 13.4 绘制模式
+### 14.4 绘制模式
 
 点击：
 
@@ -1052,7 +1120,7 @@ image_relative / segments
 - `Backspace` 撤销当前未完成墙的最后一个点。
 - `Escape` 取消当前未完成墙。
 
-### 13.5 通用地图操作
+### 14.5 通用地图操作
 
 - 鼠标滚轮：缩放。
 - 鼠标右键拖动：平移。
@@ -1061,7 +1129,7 @@ image_relative / segments
 - `撤销墙`：删除最后一条墙。
 - `清空`：清空所有墙和草稿。
 
-### 13.6 输出格式说明
+### 14.6 输出格式说明
 
 保存时会把世界坐标减去地图 YAML 的建图原点，生成 `image_relative` 坐标。
 
@@ -1087,7 +1155,7 @@ virtual_walls:
 - 保存前必须加载地图，否则无法确定 `map_origin`。
 - 一条墙至少需要 2 个点；删除点导致不足 2 点时，会自动删除整条墙。
 
-## 14. 打包与移交
+## 15. 打包与移交
 
 ### 14.1 Ubuntu 打包
 

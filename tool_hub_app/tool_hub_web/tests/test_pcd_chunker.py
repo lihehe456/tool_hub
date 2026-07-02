@@ -1,0 +1,209 @@
+from pathlib import Path
+
+import numpy as np
+
+from tool_hub_web.pcd_chunker import (
+    PcdChunkOptions,
+    build_chunk_preview_from_points,
+    bucket_points,
+    export_chunked_map_from_points,
+    load_cloud_xyz,
+    pos_to_grid,
+    prepare_output_dir,
+    save_chunk_pcd,
+    voxel_downsample,
+)
+
+
+def write_ascii_pcd(path: Path, points):
+    rows = "\n".join(f"{x} {y} {z}" for x, y, z in points)
+    path.write_text(
+        "\n".join(
+            [
+                "# .PCD v0.7 - Point Cloud Data file format",
+                "VERSION 0.7",
+                "FIELDS x y z",
+                "SIZE 4 4 4",
+                "TYPE F F F",
+                "COUNT 1 1 1",
+                f"WIDTH {len(points)}",
+                "HEIGHT 1",
+                "VIEWPOINT 0 0 0 1 0 0 0",
+                f"POINTS {len(points)}",
+                "DATA ascii",
+                rows,
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_pos_to_grid_matches_reference_rounding():
+    points_xy = np.asarray(
+        [
+            [0.0, 0.0],
+            [49.9, 0.0],
+            [50.1, 0.0],
+            [-24.9, 0.0],
+            [-25.1, 0.0],
+        ],
+        dtype=np.float64,
+    )
+
+    grids = pos_to_grid(points_xy, 50.0)
+
+    assert grids.tolist() == [
+        [0, 0],
+        [1, 0],
+        [1, 0],
+        [0, 0],
+        [-1, 0],
+    ]
+
+
+def test_bucket_points_preserves_first_seen_grid_order():
+    points_xyz = np.asarray(
+        [
+            [60.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [55.0, 2.0, 0.0],
+            [-30.0, 0.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+    grids = pos_to_grid(points_xyz[:, :2], 50.0)
+
+    buckets = bucket_points(points_xyz, grids)
+
+    assert list(buckets.keys()) == [(1, 0), (0, 0), (-1, 0)]
+    assert buckets[(1, 0)].shape == (2, 3)
+
+
+def test_build_chunk_preview_from_points_returns_chunk_summary_and_index_preview(tmp_path):
+    points_xyz = np.asarray(
+        [
+            [0.0, 0.0, 0.0],
+            [10.0, 10.0, 0.0],
+            [60.0, 5.0, 0.0],
+            [-30.0, 0.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+
+    preview = build_chunk_preview_from_points(
+        points_xyz,
+        tmp_path / "chunks",
+        PcdChunkOptions(chunk_size=50.0, start_x=1.5, start_y=-2.0, start_z=0.2),
+    )
+
+    assert preview.total_input_points == 4
+    assert preview.total_output_points == 4
+    assert preview.chunk_count == 3
+    assert [chunk.chunk_id for chunk in preview.chunks] == [0, 1, 2]
+    assert [(chunk.grid_x, chunk.grid_y) for chunk in preview.chunks] == [(0, 0), (1, 0), (-1, 0)]
+    assert [chunk.point_count for chunk in preview.chunks] == [2, 1, 1]
+    assert preview.index_preview.splitlines() == [
+        "0 0 0",
+        f"0 0 0 {(tmp_path / 'chunks' / '0.pcd').resolve()}",
+        f"1 1 0 {(tmp_path / 'chunks' / '1.pcd').resolve()}",
+        f"2 -1 0 {(tmp_path / 'chunks' / '2.pcd').resolve()}",
+        "# functional points",
+        "start 1.5 -2 0.200000000000000011 0 0 0 1",
+    ]
+
+
+def test_export_chunked_map_from_points_writes_index_and_numeric_chunk_files(tmp_path):
+    points_xyz = np.asarray(
+        [
+            [0.0, 0.0, 0.0],
+            [55.0, 0.0, 0.0],
+            [60.0, 1.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+    output_dir = tmp_path / "chunks"
+    saved = []
+
+    def fake_save_chunk(points, output_path):
+        saved.append((points.copy(), output_path))
+        output_path.write_text(f"points={len(points)}\n", encoding="utf-8")
+
+    exported = export_chunked_map_from_points(
+        points_xyz,
+        output_dir,
+        PcdChunkOptions(chunk_size=50.0, force=False),
+        save_chunk_fn=fake_save_chunk,
+    )
+
+    assert exported.chunk_count == 2
+    assert output_dir.joinpath("index.txt").is_file()
+    assert output_dir.joinpath("0.pcd").read_text(encoding="utf-8") == "points=1\n"
+    assert output_dir.joinpath("1.pcd").read_text(encoding="utf-8") == "points=2\n"
+    assert [path.name for _, path in saved] == ["0.pcd", "1.pcd"]
+
+
+def test_prepare_output_dir_force_only_removes_generated_chunk_outputs(tmp_path):
+    output_dir = tmp_path / "chunks"
+    output_dir.mkdir()
+    (output_dir / "index.txt").write_text("index\n", encoding="utf-8")
+    (output_dir / "0.pcd").write_text("chunk\n", encoding="utf-8")
+    (output_dir / "notes.txt").write_text("keep\n", encoding="utf-8")
+
+    prepare_output_dir(output_dir, force=True, repo_root=tmp_path / "repo")
+
+    assert not (output_dir / "index.txt").exists()
+    assert not (output_dir / "0.pcd").exists()
+    assert (output_dir / "notes.txt").read_text(encoding="utf-8") == "keep\n"
+
+
+def test_save_chunk_pcd_writes_binary_pcd_without_open3d_dependency(tmp_path):
+    pcd_path = tmp_path / "chunk.pcd"
+
+    save_chunk_pcd(
+        np.asarray(
+            [
+                [1.0, 2.0, 0.5],
+                [3.0, 4.0, 0.7],
+            ],
+            dtype=np.float64,
+        ),
+        pcd_path,
+    )
+
+    loaded = load_cloud_xyz(pcd_path)
+
+    assert loaded.tolist() == [
+        [1.0, 2.0, 0.5],
+        [3.0, 4.0, 0.699999988079071],
+    ]
+
+
+def test_voxel_downsample_keeps_one_representative_point_per_voxel():
+    points_xyz = np.asarray(
+        [
+            [0.01, 0.01, 0.0],
+            [0.04, 0.03, 0.0],
+            [0.26, 0.26, 0.0],
+        ],
+        dtype=np.float64,
+    )
+
+    reduced = voxel_downsample(points_xyz, 0.1)
+
+    assert reduced.shape == (2, 3)
+    assert reduced[0].tolist() == [0.025, 0.02, 0.0]
+    assert reduced[1].tolist() == [0.26, 0.26, 0.0]
+
+
+def test_build_chunk_preview_reads_existing_pcd_without_open3d(tmp_path):
+    pcd_path = tmp_path / "sample.pcd"
+    write_ascii_pcd(pcd_path, [(0.0, 0.0, 0.0), (60.0, 0.0, 0.0)])
+
+    preview = build_chunk_preview_from_points(
+        load_cloud_xyz(pcd_path),
+        tmp_path / "chunks",
+        PcdChunkOptions(chunk_size=50.0),
+    )
+
+    assert preview.chunk_count == 2

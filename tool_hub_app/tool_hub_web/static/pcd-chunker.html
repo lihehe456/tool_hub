@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCD Chunker</title>
+    <link rel="stylesheet" href="/hub-static/hub.css">
+    <style>
+      .chunker-shell {
+        display: grid;
+        gap: 1rem;
+      }
+      .chunker-panel {
+        border: 1px solid #22303c;
+        border-radius: 16px;
+        background: rgba(15, 21, 29, 0.94);
+        padding: 1rem;
+      }
+      .chunker-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: end;
+      }
+      .chunker-toolbar label {
+        flex: 1 1 220px;
+        display: grid;
+        gap: 0.35rem;
+      }
+      .chunker-toolbar input {
+        width: 100%;
+        padding: 0.6rem 0.7rem;
+        border-radius: 10px;
+        border: 1px solid #314456;
+        background: #121b24;
+        color: #d6deeb;
+        font: inherit;
+      }
+      .chunker-inline {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .chunker-inline label {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        color: #8ca4b8;
+        font-size: 0.84rem;
+      }
+      .chunker-layout {
+        display: grid;
+        grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
+        gap: 1rem;
+      }
+      .chunker-summary {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .chunker-metrics {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+      }
+      .chunker-metric {
+        border: 1px solid #22303c;
+        border-radius: 12px;
+        background: #121b24;
+        padding: 0.85rem;
+        display: grid;
+        gap: 0.25rem;
+      }
+      .chunker-metric span {
+        color: #8ca4b8;
+        font-size: 0.8rem;
+      }
+      .chunker-metric strong {
+        font-size: 1.1rem;
+      }
+      .chunker-output,
+      .chunker-index,
+      .chunker-list {
+        border: 1px solid #22303c;
+        border-radius: 12px;
+        background: #121b24;
+        padding: 0.85rem;
+      }
+      .chunker-output {
+        word-break: break-all;
+      }
+      .chunker-index pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-all;
+        color: #c8d5e2;
+      }
+      .chunker-list {
+        display: grid;
+        gap: 0.75rem;
+        align-content: start;
+      }
+      .chunker-card {
+        border: 1px solid #22303c;
+        border-radius: 12px;
+        padding: 0.8rem;
+        background: #0f151d;
+        display: grid;
+        gap: 0.35rem;
+      }
+      .chunker-card-meta {
+        color: #8ca4b8;
+        font-size: 0.82rem;
+        word-break: break-all;
+      }
+      .picker-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 8, 12, 0.72);
+        align-items: center;
+        justify-content: center;
+      }
+      .picker-overlay.visible {
+        display: flex;
+      }
+      .picker-box {
+        width: min(760px, 92vw);
+        max-height: 72vh;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        border: 1px solid #22303c;
+        border-radius: 14px;
+        background: #0f151d;
+        overflow: hidden;
+      }
+      .picker-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.9rem 1rem;
+        border-bottom: 1px solid #22303c;
+      }
+      .picker-header span {
+        flex: 1;
+        color: #8ca4b8;
+        font-size: 0.82rem;
+        word-break: break-all;
+      }
+      .picker-list {
+        overflow: auto;
+        padding: 0.85rem;
+        display: grid;
+        gap: 0.45rem;
+      }
+      .picker-entry {
+        padding: 0.65rem 0.8rem;
+        border-radius: 10px;
+        border: 1px solid #22303c;
+        background: #121b24;
+        color: #d6deeb;
+      }
+      .picker-entry.dir,
+      .picker-entry.file {
+        cursor: pointer;
+      }
+      .picker-entry.dir:hover,
+      .picker-entry.file:hover {
+        border-color: #4db0e8;
+      }
+      @media (max-width: 1100px) {
+        .chunker-layout,
+        .chunker-metrics {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="picker-overlay" class="picker-overlay">
+      <div class="picker-box">
+        <div class="picker-header">
+          <strong id="picker-title">选择路径</strong>
+          <span id="picker-cwd"></span>
+          <button type="button" id="picker-select-dir">选择当前目录</button>
+          <button type="button" id="picker-close">关闭</button>
+        </div>
+        <div id="picker-list" class="picker-list"></div>
+      </div>
+    </div>
+
+    <main class="hub-page chunker-shell">
+      <header class="hub-hero">
+        <p class="hub-kicker">3D Localization</p>
+        <h1>PCD Chunker</h1>
+        <p class="hub-subtitle">将整张点云地图切分为 3D 定位链路直接可用的 `index.txt + {id}.pcd` 分块输出。</p>
+        <p><a class="tool-link" href="/">返回导航页</a></p>
+      </header>
+
+      <section class="chunker-panel chunker-toolbar">
+        <label>
+          <span>输入 PCD</span>
+          <input id="pcd-path" type="text" placeholder="/abs/path/to/map.pcd">
+        </label>
+        <button type="button" id="browse-pcd">浏览 PCD</button>
+        <label>
+          <span>输出目录</span>
+          <input id="output-dir" type="text" placeholder="/abs/path/to/output_dir">
+        </label>
+        <button type="button" id="browse-output">浏览目录</button>
+      </section>
+
+      <section class="chunker-panel chunker-toolbar">
+        <label>
+          <span>Chunk Size (m)</span>
+          <input id="chunk-size" type="number" step="0.1" value="100">
+        </label>
+        <label>
+          <span>Voxel Size (m, optional)</span>
+          <input id="voxel-size" type="number" step="0.01" placeholder="留空则不降采样">
+        </label>
+        <label>
+          <span>Start X</span>
+          <input id="start-x" type="number" step="0.01" value="0">
+        </label>
+        <label>
+          <span>Start Y</span>
+          <input id="start-y" type="number" step="0.01" value="0">
+        </label>
+        <label>
+          <span>Start Z</span>
+          <input id="start-z" type="number" step="0.01" value="0">
+        </label>
+        <div class="chunker-inline">
+          <label><input id="force-overwrite" type="checkbox"> overwrite</label>
+          <button type="button" id="preview-button">预览分块</button>
+          <button type="button" id="export-button">导出分块</button>
+        </div>
+      </section>
+
+      <p id="chunker-status" class="hub-flow" data-error="false">准备就绪</p>
+
+      <section class="chunker-layout">
+        <article class="chunker-summary">
+          <div class="chunker-panel">
+            <h2>结果摘要</h2>
+            <div class="chunker-metrics">
+              <div class="chunker-metric">
+                <span>输入点数</span>
+                <strong id="total-input-points">-</strong>
+              </div>
+              <div class="chunker-metric">
+                <span>输出点数</span>
+                <strong id="total-output-points">-</strong>
+              </div>
+              <div class="chunker-metric">
+                <span>分块数量</span>
+                <strong id="chunk-count">-</strong>
+              </div>
+              <div class="chunker-metric">
+                <span>Chunk Size</span>
+                <strong id="chunk-size-summary">-</strong>
+              </div>
+            </div>
+          </div>
+          <div class="chunker-panel chunker-output">
+            <h2>输出目录</h2>
+            <div id="output-dir-summary">-</div>
+          </div>
+          <div class="chunker-panel chunker-index">
+            <h2>index.txt 预览</h2>
+            <pre id="index-preview">请先预览或导出</pre>
+          </div>
+        </article>
+
+        <article class="chunker-panel">
+          <h2>Chunk 列表</h2>
+          <div id="chunk-list" class="chunker-list">
+            <p class="panel-empty">请先点击“预览分块”</p>
+          </div>
+        </article>
+      </section>
+    </main>
+    <script type="module" src="/hub-static/pcd-chunker.js"></script>
+  </body>
+</html>

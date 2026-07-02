@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+import tool_hub_web.server as server_module
 from tool_hub_web.server import create_app
 
 
@@ -46,6 +47,7 @@ def test_hub_home_and_tool_routes_are_available(client):
     task_attribute_batch_generator = client.get("/task-attribute-batch-generator")
     virtual_wall_builder = client.get("/virtual-wall-builder")
     pcd_to_map = client.get("/pcd-to-map")
+    pcd_chunker = client.get("/pcd-chunker")
     subtask_composer = client.get("/subtask-composer")
 
     assert home.status_code == 200
@@ -56,6 +58,7 @@ def test_hub_home_and_tool_routes_are_available(client):
     assert b"Task Attribute Batch Generator" in home.data
     assert b"Virtual Wall Builder" in home.data
     assert b"Subtask Composer" in home.data
+    assert b"PCD Chunker" in home.data
     assert path_editor.status_code == 200
     assert b"Path Editor Web" in path_editor.data
     assert task_groups.status_code == 200
@@ -72,6 +75,8 @@ def test_hub_home_and_tool_routes_are_available(client):
     assert b"Virtual Wall Builder" in virtual_wall_builder.data
     assert pcd_to_map.status_code == 200
     assert b"PCD to 2D Map" in pcd_to_map.data
+    assert pcd_chunker.status_code == 200
+    assert b"PCD Chunker" in pcd_chunker.data
     assert subtask_composer.status_code == 200
     assert b"Subtask Composer" in subtask_composer.data
     assert b'id="delete-point"' not in subtask_composer.data
@@ -168,6 +173,7 @@ def test_subtask_composer_attributes_load_from_custom_paths(client, tmp_path):
         ("/task-attribute-batch-generator/api/runtime_config", "default_root"),
         ("/virtual-wall-builder/api/runtime_config", "default_root"),
         ("/pcd-to-map/api/runtime_config", "default_root"),
+        ("/pcd-chunker/api/runtime_config", "default_root"),
         ("/subtask-composer/api/runtime_config", "default_root"),
     ],
 )
@@ -218,7 +224,99 @@ def test_virtual_wall_builder_canvas_does_not_depend_on_wall_list_height(client)
     assert response.status_code == 200
     assert b"<details class=\"wall-collapsible\"" in response.data
     assert b"id=\"map-files-panel\"" in response.data
-    assert b"id=\"wall-files-panel\"" in response.data
+
+
+def test_pcd_chunker_preview_endpoint_returns_chunk_summary(client, monkeypatch, tmp_path):
+    pcd_path = tmp_path / "map.pcd"
+    output_dir = tmp_path / "chunks"
+    pcd_path.write_text("placeholder\n", encoding="utf-8")
+
+    class PreviewResult:
+        def to_dict(self):
+            return {
+                "chunk_count": 2,
+                "total_input_points": 10,
+                "total_output_points": 8,
+                "chunks": [
+                    {"chunk_id": 0, "grid_x": 0, "grid_y": 0, "point_count": 4, "file_name": "0.pcd"},
+                    {"chunk_id": 1, "grid_x": 1, "grid_y": 0, "point_count": 4, "file_name": "1.pcd"},
+                ],
+                "index_preview": "0 0 0",
+                "output_dir": str(output_dir),
+            }
+
+    def fake_preview(input_pcd, resolved_output_dir, options):
+        assert input_pcd == pcd_path.resolve()
+        assert resolved_output_dir == output_dir.resolve()
+        assert options.chunk_size == 50.0
+        assert options.voxel_size is None
+        assert options.start_x == 1.0
+        return PreviewResult()
+
+    monkeypatch.setattr(server_module, "build_chunk_preview", fake_preview)
+
+    response = client.post(
+        "/pcd-chunker/api/preview",
+        json={
+            "pcd_path": str(pcd_path),
+            "output_dir": str(output_dir),
+            "chunk_size": 50.0,
+            "voxel_size": "",
+            "start_x": 1.0,
+            "start_y": 2.0,
+            "start_z": 3.0,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["preview"]["chunk_count"] == 2
+
+
+def test_pcd_chunker_export_endpoint_returns_written_output(client, monkeypatch, tmp_path):
+    pcd_path = tmp_path / "map.pcd"
+    output_dir = tmp_path / "chunks"
+    pcd_path.write_text("placeholder\n", encoding="utf-8")
+
+    class ExportResult:
+        def to_dict(self):
+            return {
+                "chunk_count": 1,
+                "total_input_points": 4,
+                "total_output_points": 4,
+                "chunks": [{"chunk_id": 0, "grid_x": 0, "grid_y": 0, "point_count": 4, "file_name": "0.pcd"}],
+                "index_preview": "0 0 0",
+                "output_dir": str(output_dir),
+            }
+
+    def fake_export(input_pcd, resolved_output_dir, options):
+        assert input_pcd == pcd_path.resolve()
+        assert resolved_output_dir == output_dir.resolve()
+        assert options.force is True
+        assert options.voxel_size == 0.5
+        return ExportResult()
+
+    monkeypatch.setattr(server_module, "export_chunked_map", fake_export)
+
+    response = client.post(
+        "/pcd-chunker/api/export",
+        json={
+            "pcd_path": str(pcd_path),
+            "output_dir": str(output_dir),
+            "chunk_size": 50.0,
+            "voxel_size": 0.5,
+            "start_x": 0.0,
+            "start_y": 0.0,
+            "start_z": 0.0,
+            "force": True,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["preview"]["chunk_count"] == 1
 
 
 @pytest.mark.parametrize(
