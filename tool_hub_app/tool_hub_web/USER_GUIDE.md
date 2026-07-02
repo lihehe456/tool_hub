@@ -984,6 +984,7 @@ demo.workspace.json
 - `Chunk Size`：分块尺寸，单位米。
 - `Voxel Size`：可选降采样体素大小，留空表示不降采样。
 - `Start X / Y / Z`：写入 `index.txt` 中 `start` 行的起始平移。
+- `Workers`：导出阶段使用的并行进程数，`1` 表示串行。
 - `overwrite`：允许覆盖输出目录中已有的分块结果。
 
 ### 13.2 预览分块
@@ -1023,6 +1024,7 @@ index.txt
 
 - 当前分块规则对齐参考 `convert_map.py` 的网格归类方式。
 - `index.txt` 中每个 chunk 的路径写为绝对路径。
+- 大图导出时可以适当增大 `Workers` 来利用多核 CPU。
 - 该工具服务于 3D 定位链路，不等同于 2D 导航地图生成。
 
 ## 14. Virtual Wall Builder

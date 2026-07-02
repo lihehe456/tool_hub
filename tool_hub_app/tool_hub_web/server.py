@@ -347,6 +347,11 @@ def create_app(config=None):
             return None
         return float(value)
 
+    def parse_optional_positive_int(value, default):
+        if value in (None, ""):
+            return default
+        return int(value)
+
     def pcd_options_from_payload(payload, slice_payload):
         transform = payload.get("odom_to_lidar_odom") or [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         return PcdToMapOptions(
@@ -367,6 +372,7 @@ def create_app(config=None):
             start_y=float(payload.get("start_y", 0.0)),
             start_z=float(payload.get("start_z", 0.0)),
             force=bool(payload.get("force", False)),
+            workers=parse_optional_positive_int(payload.get("workers"), 1),
         )
 
     @app.get("/hub-static/<path:filename>")

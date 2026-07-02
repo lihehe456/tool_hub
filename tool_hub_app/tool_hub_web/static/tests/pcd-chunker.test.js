@@ -22,6 +22,7 @@ test("buildChunkerPayload normalizes numeric fields and trims paths", () => {
     startX: "1.5",
     startY: "-2",
     startZ: "0",
+    workers: "4",
     force: true,
   });
 
@@ -33,6 +34,7 @@ test("buildChunkerPayload normalizes numeric fields and trims paths", () => {
     start_x: 1.5,
     start_y: -2,
     start_z: 0,
+    workers: 4,
     force: true,
   });
 });

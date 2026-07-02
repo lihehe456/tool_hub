@@ -15,6 +15,7 @@ export function buildChunkerPayload(formValues) {
     start_x: Number(formValues.startX),
     start_y: Number(formValues.startY),
     start_z: Number(formValues.startZ),
+    workers: Number(formValues.workers),
     force: Boolean(formValues.force),
   };
 }
@@ -47,6 +48,7 @@ const el = typeof document === "undefined" ? {} : {
   startX: document.querySelector("#start-x"),
   startY: document.querySelector("#start-y"),
   startZ: document.querySelector("#start-z"),
+  workers: document.querySelector("#workers"),
   forceOverwrite: document.querySelector("#force-overwrite"),
   previewButton: document.querySelector("#preview-button"),
   exportButton: document.querySelector("#export-button"),
@@ -95,6 +97,7 @@ function currentPayload() {
     startX: el.startX.value,
     startY: el.startY.value,
     startZ: el.startZ.value,
+    workers: el.workers.value,
     force: el.forceOverwrite.checked,
   });
 }

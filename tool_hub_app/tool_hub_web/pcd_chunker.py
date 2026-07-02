@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-import struct
 from typing import Any, Callable
 
 import numpy as np
@@ -17,6 +17,7 @@ class PcdChunkOptions:
     start_y: float = 0.0
     start_z: float = 0.0
     force: bool = False
+    workers: int = 1
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,16 @@ class ChunkPreview:
         }
 
 
+@dataclass(frozen=True)
+class ChunkJob:
+    chunk_id: int
+    grid_x: int
+    grid_y: int
+    points_xyz: np.ndarray
+    output_path: str
+    voxel_size: float | None
+
+
 def validate_chunk_inputs(input_pcd: Path, options: PcdChunkOptions) -> Path:
     input_path = Path(input_pcd).expanduser().resolve()
     if not input_path.exists() or not input_path.is_file():
@@ -79,6 +90,8 @@ def validate_chunk_options(options: PcdChunkOptions) -> None:
         raise ValueError(f"chunk_size must be > 0, got: {options.chunk_size}")
     if options.voxel_size is not None and options.voxel_size <= 0:
         raise ValueError(f"voxel_size must be > 0 when provided, got: {options.voxel_size}")
+    if int(options.workers) <= 0:
+        raise ValueError(f"workers must be > 0, got: {options.workers}")
 
 
 def prepare_output_dir(output_dir: Path, force: bool, repo_root: Path) -> Path:
@@ -125,34 +138,30 @@ def pos_to_grid(points_xy: np.ndarray, chunk_size: float) -> np.ndarray:
 def bucket_points(points_xyz: np.ndarray, grids: np.ndarray) -> dict[tuple[int, int], np.ndarray]:
     if points_xyz.shape[0] != grids.shape[0]:
         raise ValueError("points and grids must have the same number of rows")
+    if points_xyz.shape[0] == 0:
+        return {}
 
-    buckets: dict[tuple[int, int], list[np.ndarray]] = {}
-    for point, grid in zip(points_xyz, grids):
-        key = (int(grid[0]), int(grid[1]))
-        buckets.setdefault(key, []).append(point)
-    return {key: np.asarray(values, dtype=np.float64) for key, values in buckets.items()}
+    grouped_rows, grouped_points = _group_rows_preserving_first_seen(grids, points_xyz)
+    return {
+        (int(row[0]), int(row[1])): np.asarray(points, dtype=np.float64)
+        for row, points in zip(grouped_rows, grouped_points)
+    }
 
 
 def voxel_downsample(points_xyz: np.ndarray, voxel_size: float) -> np.ndarray:
     if points_xyz.size == 0:
         return points_xyz
-    voxel_map: dict[tuple[int, int, int], tuple[np.ndarray, int]] = {}
-    for point in np.asarray(points_xyz, dtype=np.float64):
-        key = tuple(np.floor(point / float(voxel_size)).astype(np.int64).tolist())
-        if key in voxel_map:
-            point_sum, count = voxel_map[key]
-            voxel_map[key] = (point_sum + point, count + 1)
-        else:
-            voxel_map[key] = (point.copy(), 1)
-
-    reduced = []
-    for point_sum, count in voxel_map.values():
-        reduced.append(point_sum / count)
-    return np.asarray(reduced, dtype=np.float64)
+    points = np.asarray(points_xyz, dtype=np.float64)
+    voxel_keys = np.floor(points / float(voxel_size)).astype(np.int64)
+    _, ordered_inverse, order = _ordered_unique_inverse(voxel_keys)
+    sums = np.zeros((len(order), points.shape[1]), dtype=np.float64)
+    np.add.at(sums, ordered_inverse, points)
+    counts = np.bincount(ordered_inverse, minlength=len(order)).astype(np.float64)
+    return sums / counts[:, None]
 
 
 def save_chunk_pcd(points_xyz: np.ndarray, output_path: Path) -> None:
-    points = np.asarray(points_xyz, dtype=np.float32)
+    points = np.asarray(points_xyz, dtype="<f4")
     header = "\n".join(
         [
             "# .PCD v0.7 - Point Cloud Data file format",
@@ -168,8 +177,7 @@ def save_chunk_pcd(points_xyz: np.ndarray, output_path: Path) -> None:
             "DATA binary",
         ]
     ).encode("ascii") + b"\n"
-    payload = b"".join(struct.pack("<fff", float(x), float(y), float(z)) for x, y, z in points)
-    Path(output_path).write_bytes(header + payload)
+    Path(output_path).write_bytes(header + points.tobytes(order="C"))
 
 
 def build_index_preview(index_entries: list[tuple[int, int, int, Path]], start_xyz: tuple[float, float, float]) -> str:
@@ -273,23 +281,32 @@ def export_chunked_map_from_points(
     target_dir = prepare_output_dir(output_dir, options.force, repo_root)
     grids = pos_to_grid(points_xyz[:, :2], options.chunk_size)
     buckets = bucket_points(points_xyz[:, :3], grids)
+    jobs = [
+        ChunkJob(
+            chunk_id=chunk_id,
+            grid_x=grid_x,
+            grid_y=grid_y,
+            points_xyz=buckets[(grid_x, grid_y)],
+            output_path=str((target_dir / f"{chunk_id}.pcd").resolve()),
+            voxel_size=options.voxel_size,
+        )
+        for chunk_id, (grid_x, grid_y) in enumerate(buckets.keys())
+    ]
+    processed = _run_chunk_jobs(
+        jobs,
+        workers=options.workers,
+        downsample_fn=downsample_fn,
+        save_chunk_fn=save_chunk_fn,
+    )
     index_entries: list[tuple[int, int, int, Path]] = []
     chunks: list[ChunkSummary] = []
     total_output_points = 0
-    downsample = downsample_fn or voxel_downsample
-    save_chunk = save_chunk_fn or save_chunk_pcd
-
-    for chunk_id, key in enumerate(buckets.keys()):
-        grid_x, grid_y = key
-        chunk_points = buckets[key]
-        if options.voxel_size is not None:
-            chunk_points = downsample(chunk_points, options.voxel_size)
-        if chunk_points.size == 0:
+    for result in processed:
+        if result is None:
             continue
-        chunk_path = (target_dir / f"{chunk_id}.pcd").resolve()
-        save_chunk(chunk_points, chunk_path)
+        chunk_id, grid_x, grid_y, point_count, output_path = result
+        chunk_path = Path(output_path)
         index_entries.append((chunk_id, grid_x, grid_y, chunk_path))
-        point_count = int(chunk_points.shape[0])
         total_output_points += point_count
         chunks.append(
             ChunkSummary(
@@ -313,3 +330,68 @@ def export_chunked_map_from_points(
         index_preview=build_index_preview(index_entries, (options.start_x, options.start_y, options.start_z)),
         output_dir=str(target_dir),
     )
+
+
+def _ordered_unique_inverse(rows: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    row_keys = _row_keys(rows)
+    _, first_indices, inverse = np.unique(row_keys, return_index=True, return_inverse=True)
+    order = np.argsort(first_indices, kind="stable")
+    remap = np.empty_like(order)
+    remap[order] = np.arange(len(order))
+    ordered_inverse = remap[inverse]
+    ordered_rows = rows[first_indices[order]]
+    return ordered_rows, ordered_inverse, order
+
+
+def _group_rows_preserving_first_seen(rows: np.ndarray, payload: np.ndarray) -> tuple[np.ndarray, list[np.ndarray]]:
+    ordered_rows, ordered_inverse, _ = _ordered_unique_inverse(rows)
+    sort_order = np.argsort(ordered_inverse, kind="stable")
+    sorted_groups = ordered_inverse[sort_order]
+    split_indices = np.flatnonzero(np.diff(sorted_groups)) + 1
+    grouped_payload = np.split(payload[sort_order], split_indices)
+    return ordered_rows, grouped_payload
+
+
+def _row_keys(rows: np.ndarray) -> np.ndarray:
+    contiguous = np.ascontiguousarray(rows)
+    return contiguous.view(np.dtype((np.void, contiguous.dtype.itemsize * contiguous.shape[1]))).ravel()
+
+
+def _run_chunk_jobs(
+    jobs: list[ChunkJob],
+    workers: int,
+    downsample_fn: Callable[[np.ndarray, float], np.ndarray] | None,
+    save_chunk_fn: Callable[[np.ndarray, Path], None] | None,
+) -> list[tuple[int, int, int, int, str] | None]:
+    if not jobs:
+        return []
+    if workers > 1 and downsample_fn is None and save_chunk_fn is None and len(jobs) > 1:
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            return list(executor.map(_process_chunk_job, jobs))
+    return [
+        _process_chunk_job_inline(
+            job,
+            downsample_fn or voxel_downsample,
+            save_chunk_fn or save_chunk_pcd,
+        )
+        for job in jobs
+    ]
+
+
+def _process_chunk_job(job: ChunkJob) -> tuple[int, int, int, int, str] | None:
+    return _process_chunk_job_inline(job, voxel_downsample, save_chunk_pcd)
+
+
+def _process_chunk_job_inline(
+    job: ChunkJob,
+    downsample_fn: Callable[[np.ndarray, float], np.ndarray],
+    save_chunk_fn: Callable[[np.ndarray, Path], None],
+) -> tuple[int, int, int, int, str] | None:
+    chunk_points = job.points_xyz
+    if job.voxel_size is not None:
+        chunk_points = downsample_fn(chunk_points, job.voxel_size)
+    if chunk_points.size == 0:
+        return None
+    output_path = Path(job.output_path)
+    save_chunk_fn(chunk_points, output_path)
+    return (job.chunk_id, job.grid_x, job.grid_y, int(chunk_points.shape[0]), str(output_path))

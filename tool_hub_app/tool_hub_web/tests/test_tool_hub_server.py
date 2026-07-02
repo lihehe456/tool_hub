@@ -295,6 +295,7 @@ def test_pcd_chunker_export_endpoint_returns_written_output(client, monkeypatch,
         assert resolved_output_dir == output_dir.resolve()
         assert options.force is True
         assert options.voxel_size == 0.5
+        assert options.workers == 4
         return ExportResult()
 
     monkeypatch.setattr(server_module, "export_chunked_map", fake_export)
@@ -310,6 +311,7 @@ def test_pcd_chunker_export_endpoint_returns_written_output(client, monkeypatch,
             "start_y": 0.0,
             "start_z": 0.0,
             "force": True,
+            "workers": 4,
         },
     )
 

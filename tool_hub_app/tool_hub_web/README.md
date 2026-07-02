@@ -103,4 +103,4 @@ tool_hub_app/tool_hub_web/dist/RY-Robot-Tool-Hub/
 - `tool_hub_web` 是新的统一入口，不替代旧工具的独立启动能力
 - `Waypoint Task Builder` 面向现有 `waypoint_tasks/*.xml` 模板，支持加载、树结构编辑、参数编辑、XML 预览和保存
 - `PCD to 2D Map` 按原 `pcd2pgm` 链路预览不同高度切片并导出 `PGM/YAML`
-- `PCD Chunker` 将整张 `.pcd` 地图切分成 `index.txt + {id}.pcd` 供 3D 定位算法直接使用
+- `PCD Chunker` 将整张 `.pcd` 地图切分成 `index.txt + {id}.pcd` 供 3D 定位算法直接使用，并支持按 `workers` 并行导出 chunk

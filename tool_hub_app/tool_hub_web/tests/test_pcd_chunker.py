@@ -207,3 +207,42 @@ def test_build_chunk_preview_reads_existing_pcd_without_open3d(tmp_path):
     )
 
     assert preview.chunk_count == 2
+
+
+def test_export_chunked_map_uses_process_pool_when_workers_gt_one(monkeypatch, tmp_path):
+    points_xyz = np.asarray(
+        [
+            [0.0, 0.0, 0.0],
+            [60.0, 0.0, 0.0],
+            [120.0, 0.0, 0.0],
+        ],
+        dtype=np.float64,
+    )
+    output_dir = tmp_path / "chunks"
+    calls = {"max_workers": None, "jobs": 0}
+
+    class FakeExecutor:
+        def __init__(self, max_workers):
+            calls["max_workers"] = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def map(self, fn, jobs):
+            job_list = list(jobs)
+            calls["jobs"] = len(job_list)
+            return [fn(job) for job in job_list]
+
+    monkeypatch.setattr("tool_hub_web.pcd_chunker.ProcessPoolExecutor", FakeExecutor)
+
+    exported = export_chunked_map_from_points(
+        points_xyz,
+        output_dir,
+        PcdChunkOptions(chunk_size=50.0, workers=3),
+    )
+
+    assert exported.chunk_count == 3
+    assert calls == {"max_workers": 3, "jobs": 3}
