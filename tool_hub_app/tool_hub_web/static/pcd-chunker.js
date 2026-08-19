@@ -6,6 +6,28 @@ export function normalizeOptionalNumber(rawValue) {
   return Number(text);
 }
 
+const LOC_CONFIG_CATEGORIES = new Set(["elevator_hall", "floor", "indoor", "outdoor", "underground", "market"]);
+
+export function normalizeLocConfigSegment(rawValue) {
+  return String(rawValue ?? "").trim().replace(/[\\\/]+/g, "_").replace(/\s+/g, "_");
+}
+
+export function buildLocConfigName(community, building, unit, mapCategory) {
+  const category = String(mapCategory ?? "").trim().toLowerCase();
+  if (!LOC_CONFIG_CATEGORIES.has(category)) {
+    return "";
+  }
+  const parts = [
+    normalizeLocConfigSegment(community),
+    normalizeLocConfigSegment(building),
+    normalizeLocConfigSegment(unit),
+  ];
+  if (parts.some((part) => !part)) {
+    return "";
+  }
+  return `rycx_loc_${parts[0]}_${parts[1]}_${parts[2]}_${category}.yaml`;
+}
+
 export function buildChunkerPayload(formValues) {
   return {
     pcd_path: String(formValues.pcdPath ?? "").trim(),
@@ -18,6 +40,10 @@ export function buildChunkerPayload(formValues) {
     workers: Number(formValues.workers),
     cache_mb: Number(formValues.cacheMb),
     map_category: String(formValues.mapCategory ?? "outdoor").trim() || "outdoor",
+    community: String(formValues.community ?? "").trim(),
+    building: String(formValues.building ?? "").trim(),
+    unit: String(formValues.unit ?? "").trim(),
+    auto_loc_config_name: Boolean(formValues.autoLocConfigName),
     loc_config_name: String(formValues.locConfigName ?? "").trim(),
     force: Boolean(formValues.force),
   };
@@ -54,6 +80,10 @@ const el = typeof document === "undefined" ? {} : {
   workers: document.querySelector("#workers"),
   cacheMb: document.querySelector("#cache-mb"),
   mapCategory: document.querySelector("#map-category"),
+  community: document.querySelector("#community"),
+  building: document.querySelector("#building"),
+  unit: document.querySelector("#unit"),
+  autoLocConfigName: document.querySelector("#auto-loc-config-name"),
   locConfigName: document.querySelector("#loc-config-name"),
   forceOverwrite: document.querySelector("#force-overwrite"),
   previewButton: document.querySelector("#preview-button"),
@@ -67,6 +97,7 @@ const el = typeof document === "undefined" ? {} : {
   chunkSizeSummary: document.querySelector("#chunk-size-summary"),
   outputDirSummary: document.querySelector("#output-dir-summary"),
   locConfigSummary: document.querySelector("#loc-config-summary"),
+  locConfigNamePreview: document.querySelector("#loc-config-name-preview"),
   indexPreview: document.querySelector("#index-preview"),
   chunkList: document.querySelector("#chunk-list"),
   pickerOverlay: document.querySelector("#picker-overlay"),
@@ -107,9 +138,28 @@ function currentPayload() {
     workers: el.workers.value,
     cacheMb: el.cacheMb.value,
     mapCategory: el.mapCategory.value,
+    community: el.community.value,
+    building: el.building.value,
+    unit: el.unit.value,
+    autoLocConfigName: el.autoLocConfigName.checked,
     locConfigName: el.locConfigName.value,
     force: el.forceOverwrite.checked,
   });
+}
+
+function updateLocConfigPreview() {
+  const payload = currentPayload();
+  const autoName = buildLocConfigName(payload.community, payload.building, payload.unit, payload.map_category);
+  const preview = payload.auto_loc_config_name ? autoName : payload.loc_config_name;
+  el.locConfigName.disabled = payload.auto_loc_config_name;
+  if (el.locConfigNamePreview) {
+    el.locConfigNamePreview.textContent = preview || (payload.auto_loc_config_name ? "请填写社区、楼栋、单元" : "请填写文件名");
+  }
+  if (payload.auto_loc_config_name) {
+    el.locConfigSummary.textContent = autoName || "自动命名待生成";
+  } else {
+    el.locConfigSummary.textContent = payload.loc_config_name || "请填写文件名";
+  }
 }
 
 function renderPreview(preview) {
@@ -124,7 +174,11 @@ function renderPreview(preview) {
 
 function renderResult(result) {
   renderPreview(result.preview);
-  el.locConfigSummary.textContent = result.loc_config?.path || "导出时生成";
+  if (result.loc_config?.path) {
+    el.locConfigSummary.textContent = result.loc_config.path;
+  } else {
+    updateLocConfigPreview();
+  }
 }
 
 async function fetchRuntimeConfig() {
@@ -218,6 +272,17 @@ function initPage() {
   el.browsePcd.addEventListener("click", () => openPicker("pcd"));
   el.browseOutput.addEventListener("click", () => openPicker("output"));
   el.pickerClose.addEventListener("click", closePicker);
+  [
+    el.mapCategory,
+    el.community,
+    el.building,
+    el.unit,
+    el.autoLocConfigName,
+    el.locConfigName,
+  ].forEach((element) => {
+    element.addEventListener("input", updateLocConfigPreview);
+    element.addEventListener("change", updateLocConfigPreview);
+  });
   el.pickerOverlay.addEventListener("click", (event) => {
     if (event.target === el.pickerOverlay) {
       closePicker();
@@ -242,7 +307,12 @@ function initPage() {
   });
   el.exportButton.addEventListener("click", async () => {
     try {
-      if (!el.locConfigName.value.trim()) {
+      if (el.autoLocConfigName.checked) {
+        const autoName = buildLocConfigName(el.community.value, el.building.value, el.unit.value, el.mapCategory.value);
+        if (!autoName) {
+          throw new Error("自动命名需要填写社区、楼栋、单元，并选择有效的地图分类");
+        }
+      } else if (!el.locConfigName.value.trim()) {
         throw new Error("请填写定位配置文件名");
       }
       setStatus("正在导出分块结果...");
@@ -251,6 +321,7 @@ function initPage() {
       setStatus(error.message, true);
     }
   });
+  updateLocConfigPreview();
 }
 
 if (typeof document !== "undefined") {

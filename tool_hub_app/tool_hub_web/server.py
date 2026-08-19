@@ -54,6 +54,7 @@ try:
         DEFAULT_LOC_CONFIG_OUTPUT_DIR,
         PcdChunkOptions,
         build_chunk_preview,
+        build_loc_config_name,
         export_chunked_map,
         generate_loc_config,
     )
@@ -109,6 +110,7 @@ except ModuleNotFoundError:
         DEFAULT_LOC_CONFIG_OUTPUT_DIR,
         PcdChunkOptions,
         build_chunk_preview,
+        build_loc_config_name,
         export_chunked_map,
         generate_loc_config,
     )
@@ -239,6 +241,13 @@ def create_app(config=None):
         if not target.is_absolute():
             raise ValueError(f"{field_name} must be an absolute path")
         return target.resolve()
+
+    def parse_bool(raw_value):
+        if isinstance(raw_value, bool):
+            return raw_value
+        if isinstance(raw_value, str):
+            return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(raw_value)
 
     def browse_absolute_path(raw_path, fallback):
         raw_path = raw_path or str(fallback)
@@ -462,10 +471,21 @@ def create_app(config=None):
         return {"ok": True, "preview": preview.to_dict()}
 
     def maybe_generate_chunk_loc_config(payload, output_dir):
-        config_name = str(payload.get("loc_config_name", "")).strip()
-        if not config_name:
-            return None
         category = str(payload.get("map_category", "outdoor")).strip().lower()
+        auto_name = parse_bool(payload.get("auto_loc_config_name", False))
+        if auto_name:
+            config_name = build_loc_config_name(
+                payload.get("community", ""),
+                payload.get("building", ""),
+                payload.get("unit", ""),
+                category,
+            )
+            if not config_name:
+                raise ValueError("auto_loc_config_name requires community, building, unit, and a valid map_category")
+        else:
+            config_name = str(payload.get("loc_config_name", "")).strip()
+            if not config_name:
+                raise ValueError("loc_config_name is required")
         config_path = generate_loc_config(
             category,
             output_dir,
@@ -474,6 +494,7 @@ def create_app(config=None):
         )
         return {
             "map_category": category,
+            "auto_loc_config_name": auto_name,
             "path": str(config_path),
             "file_name": config_path.name,
         }

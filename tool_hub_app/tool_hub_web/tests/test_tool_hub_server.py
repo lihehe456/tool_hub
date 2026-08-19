@@ -340,6 +340,66 @@ def test_pcd_chunker_export_endpoint_returns_written_output(client, monkeypatch,
     assert generated["args"] == ("market", output_dir.resolve(), "market_loc", server_module.DEFAULT_LOC_CONFIG_OUTPUT_DIR)
 
 
+def test_pcd_chunker_export_endpoint_auto_names_loc_config(client, monkeypatch, tmp_path):
+    pcd_path = tmp_path / "map.pcd"
+    output_dir = tmp_path / "chunks"
+    pcd_path.write_text("placeholder\n", encoding="utf-8")
+
+    class ExportResult:
+        def to_dict(self):
+            return {
+                "chunk_count": 1,
+                "total_input_points": 4,
+                "total_output_points": 4,
+                "chunks": [{"chunk_id": 0, "grid_x": 0, "grid_y": 0, "point_count": 4, "file_name": "0.pcd"}],
+                "index_preview": "0 0 0",
+                "output_dir": str(output_dir),
+            }
+
+    def fake_export(input_pcd, resolved_output_dir, options):
+        assert input_pcd == pcd_path.resolve()
+        assert resolved_output_dir == output_dir.resolve()
+        return ExportResult()
+
+    generated = {}
+
+    def fake_generate(category, map_path, config_name, config_output_dir=None, template_dir=None):
+        generated["args"] = (category, map_path, config_name, config_output_dir)
+        return (config_output_dir or output_dir) / config_name
+
+    monkeypatch.setattr(server_module, "export_chunked_map", fake_export)
+    monkeypatch.setattr(server_module, "generate_loc_config", fake_generate)
+
+    response = client.post(
+        "/pcd-chunker/api/export",
+        json={
+            "pcd_path": str(pcd_path),
+            "output_dir": str(output_dir),
+            "chunk_size": 50.0,
+            "start_x": 0.0,
+            "start_y": 0.0,
+            "start_z": 0.0,
+            "force": True,
+            "workers": 1,
+            "map_category": "floor",
+            "community": "中铁阅山湖D区",
+            "building": "2_1",
+            "unit": "1",
+            "auto_loc_config_name": True,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["loc_config"]["file_name"] == "rycx_loc_中铁阅山湖D区_2_1_1_floor.yaml"
+    assert generated["args"] == (
+        "floor",
+        output_dir.resolve(),
+        "rycx_loc_中铁阅山湖D区_2_1_1_floor.yaml",
+        server_module.DEFAULT_LOC_CONFIG_OUTPUT_DIR,
+    )
+
+
 def test_pcd_chunker_export_job_returns_async_result(client, monkeypatch, tmp_path):
     pcd_path = tmp_path / "map.pcd"
     output_dir = tmp_path / "chunks"

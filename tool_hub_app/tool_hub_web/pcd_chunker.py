@@ -14,7 +14,7 @@ import numpy as np
 from tool_hub_web.pcd_to_map import parse_pcd_file
 
 
-LOC_CONFIG_CATEGORIES = ("indoor", "outdoor", "underground", "market")
+LOC_CONFIG_CATEGORIES = ("elevator_hall", "floor", "indoor", "outdoor", "underground", "market")
 LOC_CONFIG_TEMPLATE_NAMES = {
     category: f"rycx_loc_{category}_template.yaml"
     for category in LOC_CONFIG_CATEGORIES
@@ -152,6 +152,20 @@ def generate_loc_config(
     return config_path
 
 
+def build_loc_config_name(community: str, building: str, unit: str, map_category: str) -> str:
+    category = str(map_category or "").strip().lower()
+    if category not in LOC_CONFIG_TEMPLATE_NAMES:
+        return ""
+    parts = [
+        _normalize_loc_config_segment(community),
+        _normalize_loc_config_segment(building),
+        _normalize_loc_config_segment(unit),
+    ]
+    if any(not part for part in parts):
+        return ""
+    return f"rycx_loc_{parts[0]}_{parts[1]}_{parts[2]}_{category}.yaml"
+
+
 def _normalize_loc_config_name(config_name: str) -> str:
     name = str(config_name or "").strip()
     if not name:
@@ -163,6 +177,15 @@ def _normalize_loc_config_name(config_name: str) -> str:
     if Path(name).stem in {"", ".", ".."}:
         raise ValueError("loc_config_name is invalid")
     return name
+
+
+def _normalize_loc_config_segment(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"[\\\/]+", "_", text)
+    text = re.sub(r"\s+", "_", text)
+    return text
 
 
 def _replace_system_map_path(template_text: str, map_path: str) -> str:

@@ -50,6 +50,11 @@
         color: #8ca4b8;
         font-size: 0.84rem;
       }
+      .chunker-name-preview {
+        color: #8ca4b8;
+        font-size: 0.84rem;
+        word-break: break-all;
+      }
       .chunker-layout {
         display: grid;
         grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
@@ -247,11 +252,32 @@
             <option value="outdoor" selected>outdoor</option>
             <option value="underground">underground</option>
             <option value="market">market</option>
+            <option value="elevator_hall">elevator_hall</option>
+            <option value="floor">floor</option>
           </select>
         </label>
         <label>
+          <span>社区</span>
+          <input id="community" type="text" placeholder="例如 中铁阅山湖D区">
+        </label>
+        <label>
+          <span>楼栋</span>
+          <input id="building" type="text" placeholder="例如 2_1">
+        </label>
+        <label>
+          <span>单元</span>
+          <input id="unit" type="text" placeholder="例如 1">
+        </label>
+        <div class="chunker-inline">
+          <label><input id="auto-loc-config-name" type="checkbox" checked> 自动命名</label>
+        </div>
+        <label>
           <span>定位配置文件名</span>
-          <input id="loc-config-name" type="text" placeholder="例如 sichuan_loc.yaml">
+          <input id="loc-config-name" type="text" placeholder="例如 rycx_loc_中铁阅山湖D区_2_1_1_outdoor.yaml">
+        </label>
+        <label>
+          <span>命名预览</span>
+          <div id="loc-config-name-preview" class="chunker-name-preview">请填写社区、楼栋、单元</div>
         </label>
         <div class="chunker-inline">
           <label><input id="force-overwrite" type="checkbox"> overwrite</label>
@@ -307,6 +333,6 @@
         </article>
       </section>
     </main>
-    <script type="module" src="/hub-static/pcd-chunker.js?v=3"></script>
+    <script type="module" src="/hub-static/pcd-chunker.js?v=4"></script>
   </body>
 </html>

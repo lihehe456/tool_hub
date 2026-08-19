@@ -5,6 +5,7 @@ import numpy as np
 from tool_hub_web.pcd_chunker import (
     PcdChunkOptions,
     build_chunk_preview_from_points,
+    build_loc_config_name,
     bucket_points,
     export_chunked_map_from_points,
     export_chunked_map_native,
@@ -81,6 +82,12 @@ def test_generate_loc_config_replaces_only_system_map_path(tmp_path):
         "other:",
         "  map_path: /keep/other",
     ]
+
+
+def test_build_loc_config_name_uses_scene_suffix_for_all_categories():
+    assert build_loc_config_name("中铁阅山湖D区", "2_1", "1", "elevator_hall") == "rycx_loc_中铁阅山湖D区_2_1_1_elevator_hall.yaml"
+    assert build_loc_config_name("中铁阅山湖D区", "2_1", "1", "floor") == "rycx_loc_中铁阅山湖D区_2_1_1_floor.yaml"
+    assert build_loc_config_name("中铁阅山湖D区", "", "1", "outdoor") == ""
 
 
 def test_pos_to_grid_matches_reference_rounding():
