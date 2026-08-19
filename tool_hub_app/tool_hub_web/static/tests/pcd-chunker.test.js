@@ -23,6 +23,9 @@ test("buildChunkerPayload normalizes numeric fields and trims paths", () => {
     startY: "-2",
     startZ: "0",
     workers: "4",
+    cacheMb: "4096",
+    mapCategory: "market",
+    locConfigName: " market_loc.yaml ",
     force: true,
   });
 
@@ -35,6 +38,9 @@ test("buildChunkerPayload normalizes numeric fields and trims paths", () => {
     start_y: -2,
     start_z: 0,
     workers: 4,
+    cache_mb: 4096,
+    map_category: "market",
+    loc_config_name: "market_loc.yaml",
     force: true,
   });
 });

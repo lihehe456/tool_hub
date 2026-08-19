@@ -27,7 +27,8 @@
         display: grid;
         gap: 0.35rem;
       }
-      .chunker-toolbar input {
+      .chunker-toolbar input,
+      .chunker-toolbar select {
         width: 100%;
         padding: 0.6rem 0.7rem;
         border-radius: 10px;
@@ -235,6 +236,23 @@
           <span>Workers</span>
           <input id="workers" type="number" step="1" min="1" value="1">
         </label>
+        <label>
+          <span>最大并行缓存 (MB)</span>
+          <input id="cache-mb" type="number" step="256" min="256" value="2048">
+        </label>
+        <label>
+          <span>地图分类</span>
+          <select id="map-category">
+            <option value="indoor">indoor</option>
+            <option value="outdoor" selected>outdoor</option>
+            <option value="underground">underground</option>
+            <option value="market">market</option>
+          </select>
+        </label>
+        <label>
+          <span>定位配置文件名</span>
+          <input id="loc-config-name" type="text" placeholder="例如 sichuan_loc.yaml">
+        </label>
         <div class="chunker-inline">
           <label><input id="force-overwrite" type="checkbox"> overwrite</label>
           <button type="button" id="preview-button">预览分块</button>
@@ -271,6 +289,10 @@
             <h2>输出目录</h2>
             <div id="output-dir-summary">-</div>
           </div>
+          <div class="chunker-panel chunker-output">
+            <h2>定位配置</h2>
+            <div id="loc-config-summary">导出时生成</div>
+          </div>
           <div class="chunker-panel chunker-index">
             <h2>index.txt 预览</h2>
             <pre id="index-preview">请先预览或导出</pre>
@@ -285,6 +307,6 @@
         </article>
       </section>
     </main>
-    <script type="module" src="/hub-static/pcd-chunker.js"></script>
+    <script type="module" src="/hub-static/pcd-chunker.js?v=3"></script>
   </body>
 </html>

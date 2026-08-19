@@ -16,6 +16,9 @@ export function buildChunkerPayload(formValues) {
     start_y: Number(formValues.startY),
     start_z: Number(formValues.startZ),
     workers: Number(formValues.workers),
+    cache_mb: Number(formValues.cacheMb),
+    map_category: String(formValues.mapCategory ?? "outdoor").trim() || "outdoor",
+    loc_config_name: String(formValues.locConfigName ?? "").trim(),
     force: Boolean(formValues.force),
   };
 }
@@ -49,6 +52,9 @@ const el = typeof document === "undefined" ? {} : {
   startY: document.querySelector("#start-y"),
   startZ: document.querySelector("#start-z"),
   workers: document.querySelector("#workers"),
+  cacheMb: document.querySelector("#cache-mb"),
+  mapCategory: document.querySelector("#map-category"),
+  locConfigName: document.querySelector("#loc-config-name"),
   forceOverwrite: document.querySelector("#force-overwrite"),
   previewButton: document.querySelector("#preview-button"),
   exportButton: document.querySelector("#export-button"),
@@ -60,6 +66,7 @@ const el = typeof document === "undefined" ? {} : {
   chunkCount: document.querySelector("#chunk-count"),
   chunkSizeSummary: document.querySelector("#chunk-size-summary"),
   outputDirSummary: document.querySelector("#output-dir-summary"),
+  locConfigSummary: document.querySelector("#loc-config-summary"),
   indexPreview: document.querySelector("#index-preview"),
   chunkList: document.querySelector("#chunk-list"),
   pickerOverlay: document.querySelector("#picker-overlay"),
@@ -98,6 +105,9 @@ function currentPayload() {
     startY: el.startY.value,
     startZ: el.startZ.value,
     workers: el.workers.value,
+    cacheMb: el.cacheMb.value,
+    mapCategory: el.mapCategory.value,
+    locConfigName: el.locConfigName.value,
     force: el.forceOverwrite.checked,
   });
 }
@@ -110,6 +120,11 @@ function renderPreview(preview) {
   el.outputDirSummary.textContent = preview.output_dir || "-";
   el.indexPreview.textContent = preview.index_preview || "无 index 预览";
   el.chunkList.innerHTML = renderChunkCardsMarkup(preview.chunks || []);
+}
+
+function renderResult(result) {
+  renderPreview(result.preview);
+  el.locConfigSummary.textContent = result.loc_config?.path || "导出时生成";
 }
 
 async function fetchRuntimeConfig() {
@@ -174,9 +189,28 @@ function closePicker() {
 }
 
 async function runAction(url, successMessage) {
-  const data = await postJson(url, currentPayload());
-  renderPreview(data.preview);
-  setStatus(successMessage);
+  const start = await postJson(url, currentPayload());
+  if (!start.job_id) {
+    throw new Error("job_id is missing");
+  }
+  const statusUrl = url.replace(/\/$/, "");
+  while (true) {
+    const response = await fetch(`${statusUrl}/${start.job_id}`);
+    const job = await response.json();
+    if (!response.ok) {
+      throw new Error(job.error || `HTTP ${response.status}`);
+    }
+    setStatus(`${job.message || "处理中"} (${job.progress || 0}%)`);
+    if (job.status === "completed") {
+      renderResult(job.result);
+      setStatus(successMessage);
+      return;
+    }
+    if (job.status === "failed") {
+      throw new Error(job.error || job.message || "处理失败");
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
+  }
 }
 
 function initPage() {
@@ -199,16 +233,20 @@ function initPage() {
   });
   el.previewButton.addEventListener("click", async () => {
     try {
+      el.locConfigSummary.textContent = "导出时生成";
       setStatus("正在生成分块预览...");
-      await runAction("/pcd-chunker/api/preview", "分块预览已更新");
+      await runAction("/pcd-chunker/api/preview_job", "分块预览已更新");
     } catch (error) {
       setStatus(error.message, true);
     }
   });
   el.exportButton.addEventListener("click", async () => {
     try {
+      if (!el.locConfigName.value.trim()) {
+        throw new Error("请填写定位配置文件名");
+      }
       setStatus("正在导出分块结果...");
-      await runAction("/pcd-chunker/api/export", "分块结果已导出");
+      await runAction("/pcd-chunker/api/export_job", "分块结果已导出");
     } catch (error) {
       setStatus(error.message, true);
     }

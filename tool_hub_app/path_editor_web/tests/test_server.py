@@ -108,6 +108,16 @@ def test_index_serves_shell(client):
     assert b"/home/lmy/LMY/0_Code/FusionCloudRobot/maps" not in response.data
 
 
+def test_task_group_pages_include_navigation_link(client):
+    task_groups = client.get("/task-groups")
+    mixer = client.get("/task-group-mixer")
+
+    assert task_groups.status_code == 200
+    assert "返回导航页".encode("utf-8") in task_groups.data
+    assert mixer.status_code == 200
+    assert "返回导航页".encode("utf-8") in mixer.data
+
+
 def test_runtime_config_exposes_current_roots(client, sample_map, sample_path_dir):
     response = client.get("/api/runtime_config")
     payload = response.get_json()

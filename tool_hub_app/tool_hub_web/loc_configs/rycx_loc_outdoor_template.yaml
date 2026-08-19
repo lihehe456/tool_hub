@@ -1,0 +1,286 @@
+# 针对NCLT的配置
+common:
+  dataset: "AVIA"
+  lidar_topic: "/livox/lidar"
+  imu_topic: "/livox/imu"
+  odom_topic: "/odom_base_test"
+  ODOM_topic: "/encoder_info"
+  drift_topic: "/drift_status"
+  elevator_scene_service_topic: "/elevator_scene_proc"
+  relocalize_service_topic: "/localizer/relocalize"
+
+# fasterlio 参数
+fasterlio:
+  lidar_type: 1             # 1 for Livox serials LiDAR, 2 for Velodyne LiDAR, 3 for ouster LiDAR,
+  scan_line: 32
+  blind: 0.5                # 盲区，小于盲区距离的不会处理
+  time_scale: 1e-3          # 兼容不同数据集的时间单位，仅对Velodyne LiDAR(lidar_type=2)生效
+
+  skip_lidar_num: 0     # 点云的跳帧情况
+  point_filter_num: 10  # 点云采样参数
+  max_iteration: 6      # 最大迭代次数
+  filter_size_scan: 0.1 # 对scan进行的降采样
+  filter_size_map: 0.1
+  lidar_points: true # 是否存在激光点云进行定位
+  ivox_grid_resolution: 0.1        # default=0.2
+  ivox_nearby_type: 18             # 6, 18, 26
+  esti_plane_threshold: 0.1        # default=0.1
+  ivox_capacity: 800000
+  use_aa: true  # use anderson-acceleration
+
+  acc_cov: 0.1
+  gyr_cov: 0.1
+  b_acc_cov: 0.0001
+  b_gyr_cov: 0.0001
+  extrinsic_est_en: false      # true: enable the online estimation of IMU-LiDAR extrinsic
+  extrinsic_T: [0, 0, 0]
+  extrinsic_R: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+  keep_first_imu_estimation: false
+
+  # IMU 降级补偿配置 (V1.3)
+  imu_degradation:
+    degraded_timeout: 0.1             # 超过100ms无IMU进入DEGRADED
+    severe_timeout: 0.5               # 超过500ms进入SEVERE
+    lost_timeout: 2.0                 # 超过2s进入LOST
+    recovery_timeout: 0.05            # IMU间隔<50ms且连续N次后恢复
+    recovery_consecutive_count: 10    # 恢复需要的连续正常次数
+    noise_scale_degraded: 2.0         # DEGRADED时的噪声放大倍数
+    noise_scale_severe: 10.0          # SEVERE时的噪声放大倍数
+    noise_scale_lost: 50.0            # LOST时的噪声放大倍数
+
+    # 测试用 IMU 随机丢数率（发布版设为 0.0 或删除）
+    # 100Hz IMU 参考: 0.5→频繁 DEGRADED, 0.8→DEGRADED+SEVERE, 0.9→全等级覆盖
+    # test_imu_drop_rate: 0.0
+
+  # =========================================================================
+  # LIO 跳变约束 (V1.4)
+  # =========================================================================
+  lio_jump_constraint:
+    enable: true                        # 是否启用 LIO 跳变约束
+    safety_factor_trans: 2.0            # 平动安全系数（正常编码器时）
+    safety_factor_rot: 2.0              # 转动安全系数（正常编码器时）
+    base_trans: 0.20                    # 平动基础容差 (m)
+    base_rot: 0.20                      # 转动基础容差 (rad)
+    encoder_stale_timeout: 0.2          # 编码器过期超时 (s)，超过此值视为 stale
+    fallback_safety_factor: 4.0         # 编码器 stale 时的初始回退安全系数
+    parking_linear_th: 0.05             # 静止线速度阈值 (m/s)，低于此值视为停车
+    min_frame_dt: 0.02                  # 帧间最小时间间隔 (s)
+    max_frame_dt: 0.5                   # 帧间最大时间间隔 (s)
+    progressive_fallback_threshold: 5   # 连续丢帧超过此数后升级 fallback
+    progressive_fallback_step: 2.0      # 每次升级增加的 safety_factor
+    progressive_fallback_max: 10.0      # 最大 safety_factor 上限
+
+g2p5:
+  esti_floor: false   # 是否动态估计地面
+  lidar_height: 0.0   # 雷达安装高度
+  floor_height: -1.2   # 默认地面高度
+  min_th_floor: 0.50  # 距离地面这个高度的障碍物被扫入栅格地图中
+  max_th_floor: 1.0  # 距离地面这个高度的障碍物被扫入栅格地图中
+  grid_map_resolution: 0.2 # 栅格地图分辨率
+
+system:
+  with_loop_closing: false # 是否需要回环检测
+  with_ui: true # 是否需要3D UI
+  with_2dui: false # 是否需要2D UI
+  with_g2p5: false # 是否需要栅格地图
+  step_on_kf: false # 是否在关键帧处暂停
+
+  enable_lidar_loc_skip: false
+  enable_lidar_loc_rviz: false
+  enable_lidar_odom_skip: false
+  enable_encoder_processing: false
+  evaluation: false
+  lidar_loc_skip_num: 2
+  lidar_odom_skip_num: 2
+  map_path: /opt/ry/data/maps/shenzhen/outdoor
+  #map_path: /home/lhq/map/深圳-顺丰/outdoor/
+  pub_tf: true
+  pub_odom: true
+  pub_tf_chain: true
+  force_tf_z_zero: false    # 是否强制将发布TF/odometry的z值置0（默认false）
+  init_pose_source: 1 # 0: default, 1: yaml, 2: extranal
+  init_pose:
+    x: 0.0
+    y: 0.0
+    z: 0.4
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+  # init_pose:
+  #   x: -4.68981
+  #   y: 6.1506
+  #   z: 0.389717
+  #   roll: -0.0119012
+  #   pitch: 0.0172502
+  #   yaw: 1.60314
+  
+  # init_pose:
+  #   x: 0.332818
+  #   y: -0.571582
+  #   z: 0.4
+  #   roll: 0.0
+  #   pitch: 0.0
+  #   yaw: 0.0
+
+loop_closing:
+  loop_kf_gap: 20       # 每隔多少个关键帧检查一次
+  min_id_interval: 20   # 被检查的关键帧ID间隔
+  closest_id_th: 50     # 历史关键帧与当前帧的ID间隔
+  max_range: 30.0       # 候选帧的最大距离
+  ndt_score_th: 1.2     # ndt位姿分值
+  with_height: true
+
+
+### localization ================================================================================================
+lidar_loc:
+  enable_scan_context_reloc: false
+  enable_sc_init_reloc: false
+  enable_dynamic_polygon: false
+  enable_parking_static: true
+  enable_icp_adjust: true
+  icp_skip_num: 3
+  filter_intensity_max: 100.0
+  filter_intensity_min: 10.0
+  filter_z_max: 30.0
+  filter_z_min: -1.0
+  force_2d: false
+  grid_search_angle_range: 30.0
+  grid_search_angle_step: 30
+  lidar_loc_odom_th: 0.5
+  enable_degraded_init: true          # V1.3: 电梯场景降级初始化策略
+  degraded_min_confidence: 0.6        # V1.3: 降级模式最低置信度阈值
+  degraded_max_attempts: 5            # V1.3: 降级初始化最大尝试次数
+  degraded_force_accept: true         # V1.3: 降级初始化是否强制接受结果
+  valid_ndt_score_th: 0.00            # V1.4: 运行态NDT最低可接受分数,低于此值冻结re_pose
+  init_with_fp: false
+  min_init_confidence: 0.1
+  update_dynamic_cloud: false
+  update_err_h: 0.2
+  update_err_v: 0.2
+  update_kf_dis: 2.0
+  update_lidar_loc_score: 2.5
+  wheel_separation: 0.50374
+  wheel_radius: 0.09
+  wheel_extrap_ndt_score_th: 2.0
+  encoder_queue_max_size: 200
+  loc_on_kf: true
+  try_self_extrap: false
+  loc_with_roi: false
+  roi:
+    height_max: 30.0
+    height_min: -10.0
+    range_max_x: 40
+    range_min_x: -40
+    range_max_y: 25
+    range_min_y: -25
+loc_accuracy_evo:
+  ndt_accept_score_th: 0.3
+  ndt_high_score_th: 0.6
+  consecutive_match_suc_th: 2
+  consecutive_low_score_th: 5
+  lio_pos_error_th: 0.5
+  lio_yaw_error_th: 3.5
+  no_lidar_data_time_th: 1.2
+  loc_fail_time_gap_th: 1.0
+  init_frame_gap_th: 10
+maps:
+  delete_when_unload: false
+  dyn_cloud_policy: persistent
+  load_dyn_cloud: false
+  load_map_size: 2
+  max_pts_dyn_chunk: 100000
+  save_dyn_when_quit: false
+  save_dyn_when_unload: false
+  unload_map_size: 4
+  with_dyn_area: false
+  map_with_roi: true
+  factor_roi: 1.2
+  load_ndt_target_dis_th: 5.0
+  inv_chunk_size: 0.01
+roi:
+  height_max: 0.5
+  height_min: -2.0
+  range_max: 70
+  range_min: 3.0
+ui:
+  car_length: 2.0
+  car_width: 1.6
+  car_height: 1.7
+  scans: 1
+area_init:
+  enable: false
+  init_strategy: 1       
+  cache_frames: 3        
+  voxel_leaf_size: 0.1        
+  projection_grid_size: 0.02    
+  coarse:           
+    range_x: 0.5           
+    range_y: 0.5             
+    range_yaw_deg: 30.0         
+    resolution_x: 20       
+    resolution_y: 20             
+    resolution_yaw: 30    
+  fine:                    
+    range_x: 0.1                
+    range_y: 0.1    
+    range_yaw_deg: 5.0 
+    resolution: 20
+  polygon:                           
+    vertices:
+# Scan Context 重定位参数
+scan_context:
+  #enable_scan_context_reloc: true  # 是否启用Scan Context重定位
+  #enable_sc_init_reloc: true       # 是否在初始化时尝试Scan Context重定位
+  save_database_on_exit: false      # 是否在退出时保存数据库
+  load_database_on_start: false     # 是否在启动时加载数据库
+  database_path: "/home/ry/workspace/robot_ws/src/lightning-lm/data/donghucheng/outdoor_1231/scan_context.bin"  # 默认数据库文件路径（地图切换时会自动生成对应路径）
+  pc_num_ring: 20                  # 环的数量（距离离散化）
+  pc_num_sector: 60                # 扇区的数量（角度离散化）
+  pc_max_radius: 80.0              # 最大检测距离（米）
+  sc_dist_thres: 0.15              # Scan Context距离阈值
+  lidar_height: 1.73               # 激光雷达高度（米）
+  tree_making_period: 50           # 每多少帧重建一次KD树
+  num_exclude_recent: 50           # 排除最近多少帧
+  num_candidates_from_tree: 10     # KD树候选数量
+  search_ratio: 0.1                # 搜索范围比例
+
+# =========================================================================
+# 电梯区域自适应 ivox (V1.4)
+# zone 支持两种定义方式 (互斥, 每个 zone 只能选一种):
+#   1) polygon: xy 多边形顶点列表 (至少3个点)
+#   2) circle:  圆心坐标 + 半径
+# =========================================================================
+elevator_zones:
+  enable: false                    # 是否启用电梯区域自适应 ivox (正式部署前设为 false)
+  zones:
+    # 示例: polygon 方式 (需要根据实际场景测量替换)
+    # - name: "elevator_A"
+    #   polygon:
+    #     - [1.0, 2.0]
+    #     - [3.0, 2.0]
+    #     - [3.0, 4.0]
+    #     - [1.0, 4.0]
+    #   z_min: 0.0
+    #   z_max: 2.5
+    #   ivox_resolution: 0.05
+    #
+    # 示例: circle 方式 (圆心 + 半径)
+    # - name: "elevator_B"
+    #   circle:
+    #     center: [1.0, 2.0]
+    #     radius: 1.5
+    #   z_min: 0.0
+    #   z_max: 2.5
+    #   ivox_resolution: 0.05
+
+# =========================================================================
+# 电梯镜面反射过滤
+# 传感器在圆内时，射线穿透圆边界的点判定为噪声点并过滤
+# =========================================================================
+mirror_filter:
+  enable: false                     # 总开关
+  topic: "/task_status"            # 任务状态topic
+  elevator_status_code: "200"      # 触发过滤的电梯任务状态码
+  circle:
+    center: [0.0, 0.0]             # map系圆心 (x, y)
+    radius: 1.2                    # 过滤半径 (m)

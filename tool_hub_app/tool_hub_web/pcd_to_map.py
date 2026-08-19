@@ -6,6 +6,7 @@ import re
 import struct
 import zlib
 
+import numpy as np
 
 
 Point = tuple[float, float, float]
@@ -370,16 +371,39 @@ def _parse_binary_compressed_xyz_blocks(data, metadata):
     if len(data) < expected_size:
         raise ValueError("Invalid binary_compressed PCD: decompressed data is truncated")
 
-    points = []
-    for index in range(point_count):
-        points.append(
-            (
-                _unpack_compressed_field(data, metadata, field_offsets, "x", index, point_count),
-                _unpack_compressed_field(data, metadata, field_offsets, "y", index, point_count),
-                _unpack_compressed_field(data, metadata, field_offsets, "z", index, point_count),
-            )
-        )
-    return points
+    x_values = _read_compressed_numeric_field(data, metadata, field_offsets, "x", point_count)
+    y_values = _read_compressed_numeric_field(data, metadata, field_offsets, "y", point_count)
+    z_values = _read_compressed_numeric_field(data, metadata, field_offsets, "z", point_count)
+    return [tuple(row) for row in np.column_stack((x_values, y_values, z_values)).tolist()]
+
+
+def _read_compressed_numeric_field(data, metadata, field_offsets, field_name, point_count):
+    fields = metadata["fields"]
+    field_index = fields.index(field_name)
+    size = metadata["size"][field_index]
+    value_type = metadata["type"][field_index].upper()
+    count = metadata.get("count", [1] * len(fields))[field_index]
+    if count != 1:
+        raise ValueError(f"Unsupported binary_compressed PCD field count for {field_name}: {count}")
+    dtype_map = {
+        (4, "F"): "<f4",
+        (8, "F"): "<f8",
+        (1, "I"): "<u1",
+        (2, "I"): "<u2",
+        (4, "I"): "<u4",
+        (1, "U"): "<u1",
+        (2, "U"): "<u2",
+        (4, "U"): "<u4",
+    }
+    dtype = dtype_map.get((size, value_type))
+    if dtype is None:
+        raise ValueError(f"Unsupported binary_compressed PCD field type: size={size}, type={value_type}")
+    return np.frombuffer(
+        data,
+        dtype=np.dtype(dtype),
+        count=point_count,
+        offset=field_offsets[field_name],
+    ).astype(np.float64, copy=False)
 
 
 def _unpack_compressed_field(data, metadata, field_offsets, field_name, point_index, point_count):

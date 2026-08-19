@@ -7,6 +7,8 @@ from tool_hub_web.pcd_chunker import (
     build_chunk_preview_from_points,
     bucket_points,
     export_chunked_map_from_points,
+    export_chunked_map_native,
+    generate_loc_config,
     load_cloud_xyz,
     pos_to_grid,
     prepare_output_dir,
@@ -37,6 +39,48 @@ def write_ascii_pcd(path: Path, points):
         + "\n",
         encoding="utf-8",
     )
+
+
+def test_generate_loc_config_replaces_only_system_map_path(tmp_path):
+    template_dir = tmp_path / "templates"
+    output_dir = tmp_path / "chunks"
+    config_dir = tmp_path / "localization-config"
+    template_dir.mkdir()
+    output_dir.mkdir()
+    (template_dir / "rycx_loc_outdoor_template.yaml").write_text(
+        "\n".join(
+            [
+                "common:",
+                "  map_path: /keep/common",
+                "system:",
+                "  with_ui: true",
+                "  map_path: /old/map",
+                "other:",
+                "  map_path: /keep/other",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    config_path = generate_loc_config(
+        "outdoor",
+        output_dir,
+        "robot_loc",
+        template_dir=template_dir,
+        config_output_dir=config_dir,
+    )
+
+    assert config_path == config_dir / "robot_loc.yaml"
+    assert config_path.read_text(encoding="utf-8").splitlines() == [
+        "common:",
+        "  map_path: /keep/common",
+        "system:",
+        "  with_ui: true",
+        f"  map_path: {output_dir.resolve()}",
+        "other:",
+        "  map_path: /keep/other",
+    ]
 
 
 def test_pos_to_grid_matches_reference_rounding():
@@ -246,3 +290,95 @@ def test_export_chunked_map_uses_process_pool_when_workers_gt_one(monkeypatch, t
 
     assert exported.chunk_count == 3
     assert calls == {"max_workers": 3, "jobs": 3}
+
+
+def test_export_chunked_map_native_passes_workers_to_binary(monkeypatch, tmp_path):
+    output_dir = tmp_path / "chunks"
+    calls = {}
+
+    class Completed:
+        returncode = 0
+        stderr = ""
+
+    def fake_run(command, capture_output, text, check):
+        calls["command"] = command
+        output_dir.mkdir(parents=True)
+        (output_dir / "index.txt").write_text("0 0 0\n# functional points\nstart 0 0 0 0 0 0 1\n", encoding="utf-8")
+        (output_dir / "chunker.summary").write_text(
+            "\n".join(
+                [
+                    "chunk_size=50",
+                    "voxel_size=",
+                    "start_x=0",
+                    "start_y=0",
+                    "start_z=0",
+                    "total_input_points=0",
+                    "total_output_points=0",
+                    "chunk_count=0",
+                    f"output_dir={output_dir}",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return Completed()
+
+    monkeypatch.setattr("tool_hub_web.pcd_chunker.subprocess.run", fake_run)
+
+    export_chunked_map_native(
+        tmp_path / "map.pcd",
+        output_dir,
+        PcdChunkOptions(chunk_size=50, workers=4),
+        Path("/tmp/pcd_chunker"),
+    )
+
+    assert "--workers" in calls["command"]
+    assert calls["command"][calls["command"].index("--workers") + 1] == "4"
+
+
+def test_build_chunk_preview_native_uses_summary_only(monkeypatch, tmp_path):
+    from tool_hub_web.pcd_chunker import build_chunk_preview_native
+
+    output_dir = tmp_path / "chunks"
+    calls = {}
+
+    class Completed:
+        returncode = 0
+        stderr = ""
+
+    def fake_run(command, capture_output, text, check):
+        calls["command"] = command
+        temp_output = Path(command[command.index("--output") + 1])
+        temp_output.mkdir(parents=True, exist_ok=True)
+        (temp_output / "index.txt").write_text("0 0 0\n# functional points\nstart 0 0 0 0 0 0 1\n", encoding="utf-8")
+        (temp_output / "chunker.summary").write_text(
+            "\n".join(
+                [
+                    "chunk_size=50",
+                    "voxel_size=",
+                    "start_x=0",
+                    "start_y=0",
+                    "start_z=0",
+                    "total_input_points=4",
+                    "total_output_points=4",
+                    "chunk_count=1",
+                    f"output_dir={temp_output}",
+                    f"chunk\t0\t0\t0\t4\t{temp_output / '0.pcd'}",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return Completed()
+
+    monkeypatch.setattr("tool_hub_web.pcd_chunker.subprocess.run", fake_run)
+
+    preview = build_chunk_preview_native(
+        tmp_path / "map.pcd",
+        output_dir,
+        PcdChunkOptions(chunk_size=50, workers=4),
+        Path("/tmp/pcd_chunker"),
+    )
+
+    assert "--summary-only" in calls["command"]
+    assert preview.chunks[0].file_path == str((output_dir / "0.pcd").resolve())

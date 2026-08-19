@@ -1,4 +1,5 @@
 import json
+import time
 
 import pytest
 
@@ -48,6 +49,7 @@ def test_hub_home_and_tool_routes_are_available(client):
     virtual_wall_builder = client.get("/virtual-wall-builder")
     pcd_to_map = client.get("/pcd-to-map")
     pcd_chunker = client.get("/pcd-chunker")
+    outdoor_pcd_to_pgm = client.get("/outdoor-pcd-to-pgm")
     subtask_composer = client.get("/subtask-composer")
 
     assert home.status_code == 200
@@ -62,10 +64,13 @@ def test_hub_home_and_tool_routes_are_available(client):
     assert path_editor.status_code == 200
     assert b"Path Editor Web" in path_editor.data
     assert task_groups.status_code == 200
+    assert "返回导航页".encode("utf-8") in task_groups.data
     assert mixer.status_code == 200
+    assert "返回导航页".encode("utf-8") in mixer.data
     assert task_editor.status_code == 200
     assert b"Task Editor" in task_editor.data
     assert waypoint_task_builder.status_code == 200
+    assert "返回导航页".encode("utf-8") in waypoint_task_builder.data
     assert b"/home/lmy/LMY/2_Source/path_task/waypoints_attributes/waypoint_tasks" not in waypoint_task_builder.data
     assert task_batch_generator.status_code == 200
     assert b"Task Batch Generator" in task_batch_generator.data
@@ -77,6 +82,8 @@ def test_hub_home_and_tool_routes_are_available(client):
     assert b"PCD to 2D Map" in pcd_to_map.data
     assert pcd_chunker.status_code == 200
     assert b"PCD Chunker" in pcd_chunker.data
+    assert outdoor_pcd_to_pgm.status_code == 200
+    assert b"Outdoor PCD to PGM" in outdoor_pcd_to_pgm.data
     assert subtask_composer.status_code == 200
     assert b"Subtask Composer" in subtask_composer.data
     assert b'id="delete-point"' not in subtask_composer.data
@@ -174,6 +181,7 @@ def test_subtask_composer_attributes_load_from_custom_paths(client, tmp_path):
         ("/virtual-wall-builder/api/runtime_config", "default_root"),
         ("/pcd-to-map/api/runtime_config", "default_root"),
         ("/pcd-chunker/api/runtime_config", "default_root"),
+        ("/outdoor-pcd-to-pgm/api/runtime_config", "default_root"),
         ("/subtask-composer/api/runtime_config", "default_root"),
     ],
 )
@@ -298,7 +306,14 @@ def test_pcd_chunker_export_endpoint_returns_written_output(client, monkeypatch,
         assert options.workers == 4
         return ExportResult()
 
+    generated = {}
+
+    def fake_generate(category, map_path, config_name, config_output_dir=None, template_dir=None):
+        generated["args"] = (category, map_path, config_name, config_output_dir)
+        return (config_output_dir or output_dir) / "market_loc.yaml"
+
     monkeypatch.setattr(server_module, "export_chunked_map", fake_export)
+    monkeypatch.setattr(server_module, "generate_loc_config", fake_generate)
 
     response = client.post(
         "/pcd-chunker/api/export",
@@ -312,6 +327,8 @@ def test_pcd_chunker_export_endpoint_returns_written_output(client, monkeypatch,
             "start_z": 0.0,
             "force": True,
             "workers": 4,
+            "map_category": "market",
+            "loc_config_name": "market_loc",
         },
     )
 
@@ -319,6 +336,201 @@ def test_pcd_chunker_export_endpoint_returns_written_output(client, monkeypatch,
     payload = response.get_json()
     assert payload["ok"] is True
     assert payload["preview"]["chunk_count"] == 1
+    assert payload["loc_config"]["path"] == str(server_module.DEFAULT_LOC_CONFIG_OUTPUT_DIR / "market_loc.yaml")
+    assert generated["args"] == ("market", output_dir.resolve(), "market_loc", server_module.DEFAULT_LOC_CONFIG_OUTPUT_DIR)
+
+
+def test_pcd_chunker_export_job_returns_async_result(client, monkeypatch, tmp_path):
+    pcd_path = tmp_path / "map.pcd"
+    output_dir = tmp_path / "chunks"
+    pcd_path.write_text("placeholder\n", encoding="utf-8")
+
+    class ExportPreview:
+        def to_dict(self):
+            return {
+                "chunk_size": 50,
+                "voxel_size": None,
+                "start_xyz": [0, 0, 0],
+                "total_input_points": 4,
+                "total_output_points": 4,
+                "chunk_count": 1,
+                "chunks": [],
+                "index_preview": "",
+                "output_dir": str(output_dir),
+            }
+
+    monkeypatch.setattr(server_module, "export_chunked_map", lambda path, target, options: ExportPreview())
+
+    response = client.post(
+        "/pcd-chunker/api/export_job",
+        json={
+            "pcd_path": str(pcd_path),
+            "output_dir": str(output_dir),
+            "chunk_size": 50,
+            "workers": 4,
+        },
+    )
+    job_id = response.get_json()["job_id"]
+
+    for _ in range(40):
+        status = client.get(f"/pcd-chunker/api/export_job/{job_id}")
+        payload = status.get_json()
+        if payload["status"] in {"completed", "failed"}:
+            break
+        time.sleep(0.01)
+
+    assert response.status_code == 202
+    assert status.status_code == 200
+    assert payload["status"] == "completed"
+    assert payload["result"]["preview"]["chunk_count"] == 1
+
+
+def test_outdoor_pcd_to_pgm_preview_endpoint_is_independent(client, monkeypatch, tmp_path):
+    pcd_path = tmp_path / "outdoor.pcd"
+    pcd_path.write_text("placeholder\n", encoding="utf-8")
+
+    class PreviewResult:
+        def to_preview_dict(self):
+            return {
+                "width": 12,
+                "height": 8,
+                "resolution": 0.05,
+                "origin": [1.0, 2.0, 0.0],
+                "raw_point_count": 100,
+                "filtered_point_count": 60,
+                "trajectory_used": True,
+                "warnings": [],
+                "preview_png_base64": "png",
+            }
+
+    def fake_convert(path, options):
+        assert path == pcd_path.resolve()
+        assert options.trajectory_pcd_path is None
+        assert options.sensor_height == 0.5
+        return PreviewResult()
+
+    monkeypatch.setattr(server_module, "convert_outdoor_pcd_to_pgm", fake_convert)
+
+    response = client.post(
+        "/outdoor-pcd-to-pgm/api/preview",
+        json={
+            "pcd_path": str(pcd_path),
+            "z_min": 0.0,
+            "z_max": 0.4,
+            "radius": 0.5,
+            "min_neighbors": 10,
+            "resolution": 0.05,
+            "sensor_height": 0.5,
+            "trajectory_search_radius": 30.0,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["result"]["trajectory_used"] is True
+
+
+def test_outdoor_pcd_to_pgm_export_endpoint_returns_pgm_yaml_paths(client, monkeypatch, tmp_path):
+    pcd_path = tmp_path / "outdoor.pcd"
+    output_dir = tmp_path / "output"
+    pcd_path.write_text("placeholder\n", encoding="utf-8")
+
+    class ExportResult:
+        def to_preview_dict(self):
+            return {"width": 1, "height": 1, "origin": [0.0, 0.0, 0.0]}
+
+    monkeypatch.setattr(server_module, "convert_outdoor_pcd_to_pgm", lambda path, options: ExportResult())
+    monkeypatch.setattr(
+        server_module,
+        "export_outdoor_pcd_to_pgm",
+        lambda result, target, name: {"pgm_path": str(target / f"{name}.pgm"), "yaml_path": str(target / f"{name}.yaml")},
+    )
+
+    response = client.post(
+        "/outdoor-pcd-to-pgm/api/export",
+        json={
+            "pcd_path": str(pcd_path),
+            "output_dir": str(output_dir),
+            "map_name": "outdoor",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["exported"]["pgm_path"].endswith("/outdoor.pgm")
+    assert payload["exported"]["yaml_path"].endswith("/outdoor.yaml")
+
+
+def test_outdoor_pcd_to_pgm_preview_job_returns_async_result(client, monkeypatch, tmp_path):
+    pcd_path = tmp_path / "outdoor.pcd"
+    pcd_path.write_text("placeholder\n", encoding="utf-8")
+
+    class PreviewResult:
+        def to_preview_dict(self):
+            return {"width": 1, "height": 1, "preview_png_base64": ""}
+
+    monkeypatch.setattr(
+        server_module,
+        "convert_outdoor_pcd_to_pgm",
+        lambda path, options: PreviewResult(),
+    )
+    monkeypatch.setattr(server_module, "find_cpp_backend", lambda: None)
+
+    response = client.post(
+        "/outdoor-pcd-to-pgm/api/preview_job",
+        json={"pcd_path": str(pcd_path), "z_min": 0, "z_max": 0.4},
+    )
+    job_id = response.get_json()["job_id"]
+
+    for _ in range(40):
+        status = client.get(f"/outdoor-pcd-to-pgm/api/preview_job/{job_id}")
+        payload = status.get_json()
+        if payload["status"] in {"completed", "failed"}:
+            break
+        time.sleep(0.01)
+
+    assert response.status_code == 202
+    assert status.status_code == 200
+    assert payload["status"] == "completed"
+    assert payload["result"]["result"]["width"] == 1
+
+
+def test_outdoor_pcd_to_pgm_export_job_auto_uses_same_directory_trajectory(client, monkeypatch, tmp_path):
+    pcd_path = tmp_path / "map_1.pcd"
+    trajectory_path = tmp_path / "Trajectory-Opt.pcd"
+    output_dir = tmp_path / "maps"
+    write_ascii_pcd(pcd_path, [(0.0, 0.0, 0.1), (0.2, 0.0, 0.1)])
+    write_ascii_pcd(trajectory_path, [(0.0, 0.0, 0.6), (0.2, 0.0, 0.6)])
+    monkeypatch.setattr(server_module, "find_cpp_backend", lambda: None)
+
+    response = client.post(
+        "/outdoor-pcd-to-pgm/api/export_job",
+        json={
+            "pcd_path": str(pcd_path),
+            "output_dir": str(output_dir),
+            "map_name": "outdoor",
+            "z_min": -0.1,
+            "z_max": 0.1,
+            "resolution": 0.1,
+            "radius": 0.0,
+            "min_neighbors": 0,
+            "sensor_height": 0.5,
+        },
+    )
+    job_id = response.get_json()["job_id"]
+
+    for _ in range(80):
+        status = client.get(f"/outdoor-pcd-to-pgm/api/export_job/{job_id}")
+        payload = status.get_json()
+        if payload["status"] in {"completed", "failed"}:
+            break
+        time.sleep(0.01)
+
+    assert response.status_code == 202
+    assert status.status_code == 200
+    assert payload["status"] == "completed"
+    exported = payload["result"]["exported"]
+    assert exported["trajectory_overlay_ppm_path"] == str(output_dir / "outdoor_with_trajectory.ppm")
+    assert (output_dir / "outdoor_with_trajectory.ppm").is_file()
 
 
 @pytest.mark.parametrize(

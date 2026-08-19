@@ -30,6 +30,7 @@ RY-Robot Tool Hub
 - `Virtual Wall Builder`：加载 2D 地图并绘制虚拟墙，导出旧 `VirtualWallManager` 可加载的 YAML。
 - `PCD to 2D Map`：按 `pcd2pgm` 算法预览不同高度切片，并导出 `PGM/YAML` 地图。
 - `PCD Chunker`：将整张 `.pcd` 地图切分为 3D 定位算法直接使用的 `index.txt + {id}.pcd`。
+- `Outdoor PCD to PGM`：按独立室外 PCD2PGM 实现生成 PGM/YAML，支持轨迹引导的自适应地面高度滤波。
 
 推荐主流程：
 
@@ -45,6 +46,7 @@ Task Batch Generator -> Task Editor
 Task Attribute Batch Generator -> Task Editor
 PCD to 2D Map -> Path Editor / Virtual Wall Builder
 PCD Chunker -> 3D Localization Pipeline
+Outdoor PCD to PGM -> Outdoor Navigation Map
 Virtual Wall Builder -> ROS VirtualWallManager
 ```
 
@@ -1027,7 +1029,36 @@ index.txt
 - 大图导出时可以适当增大 `Workers` 来利用多核 CPU。
 - 该工具服务于 3D 定位链路，不等同于 2D 导航地图生成。
 
-## 14. Virtual Wall Builder
+## 14. Outdoor PCD to PGM
+
+入口：
+
+```text
+/outdoor-pcd-to-pgm
+```
+
+这是独立于 `PCD to 2D Map` 的室外地图生成链路，对齐 `/mnt/data/pcd2pgm`：
+
+- 使用原始 PCD 的 XY 边界固定地图尺寸和 YAML 原点。
+- 可选加载轨迹 PCD，按轨迹 XY 做 IDW 地面高度插值。
+- 根据 `sensor_height` 将轨迹高度转换为局部地面高度。
+- 使用相对地面高度范围进行自适应 Z 滤波。
+- 轨迹不可用时回退到绝对 Z 滤波。
+- 对滤波结果执行半径离群点清理。
+- 导出 Nav2 可用的 `PGM + YAML`。
+
+主要参数：
+
+- `Z min / Z max`：相对地面高度范围；无轨迹时表示绝对 Z 范围。
+- `地图分辨率`：单位米/像素。
+- `半径滤波范围` 与 `最少邻居数`：对应 PCD2PGM 的 RadiusOutlier 参数。
+- `传感器离地高度`：轨迹引导模式下用于计算地面高度。
+- `轨迹搜索半径`：IDW 插值的 XY 搜索半径。
+- `反选高度范围`：对应 `flag_pass_through`。
+
+该工具和原有 `PCD to 2D Map` 使用不同的算法链路，修改其中一个不会改变另一个的地图结果。
+
+## 15. Virtual Wall Builder
 
 入口：
 
@@ -1042,7 +1073,7 @@ index.txt
 - 在网页画布中绘制、选择、移动、插点和删除虚拟墙。
 - 导出旧 `VirtualWallManager` 可直接加载的 YAML。
 
-### 14.1 加载地图
+### 15.1 加载地图
 
 展开 `地图文件` 面板。
 
@@ -1064,7 +1095,7 @@ index.txt
 - 地图建图原点。
 - 辅助网格。
 
-### 14.2 虚拟墙文件
+### 15.2 虚拟墙文件
 
 展开 `虚拟墙文件` 面板。
 
@@ -1091,7 +1122,7 @@ index.txt
 image_relative / segments
 ```
 
-### 14.3 选择模式
+### 15.3 选择模式
 
 默认进入选择模式。
 
@@ -1106,7 +1137,7 @@ image_relative / segments
 
 选择模式不会新增点，因此适合检查和微调。
 
-### 14.4 绘制模式
+### 15.4 绘制模式
 
 点击：
 
@@ -1122,7 +1153,7 @@ image_relative / segments
 - `Backspace` 撤销当前未完成墙的最后一个点。
 - `Escape` 取消当前未完成墙。
 
-### 14.5 通用地图操作
+### 15.5 通用地图操作
 
 - 鼠标滚轮：缩放。
 - 鼠标右键拖动：平移。
@@ -1131,7 +1162,7 @@ image_relative / segments
 - `撤销墙`：删除最后一条墙。
 - `清空`：清空所有墙和草稿。
 
-### 14.6 输出格式说明
+### 15.6 输出格式说明
 
 保存时会把世界坐标减去地图 YAML 的建图原点，生成 `image_relative` 坐标。
 
@@ -1157,9 +1188,9 @@ virtual_walls:
 - 保存前必须加载地图，否则无法确定 `map_origin`。
 - 一条墙至少需要 2 个点；删除点导致不足 2 点时，会自动删除整条墙。
 
-## 15. 打包与移交
+## 16. 打包与移交
 
-### 14.1 Ubuntu 打包
+### 16.1 Ubuntu 打包
 
 ```bash
 cd <repo>/tool_hub_app/tool_hub_web
@@ -1172,7 +1203,7 @@ bash build_linux.sh
 dist/RY-Robot-Tool-Hub/
 ```
 
-### 14.2 Windows 打包
+### 16.2 Windows 打包
 
 在 Windows 环境中执行：
 
@@ -1187,7 +1218,7 @@ build_windows.bat
 dist\RY-Robot-Tool-Hub\
 ```
 
-### 14.3 移交时需要包含
+### 16.3 移交时需要包含
 
 如果移交源码：
 
@@ -1203,7 +1234,7 @@ dist\RY-Robot-Tool-Hub\
 - 整个 `dist/RY-Robot-Tool-Hub/` 目录。
 - 外部业务数据目录，例如地图、路径、任务、路点任务 XML、速度模式等。
 
-### 14.4 常见问题
+### 16.4 常见问题
 
 端口占用：
 
@@ -1236,7 +1267,7 @@ Port 7791 is in use
 - 确认 YAML 中 `origin` 是目标地图的建图原点。
 - 不要把像素原点当成地图原点。
 
-## 15. 建议使用习惯
+## 17. 建议使用习惯
 
 - 路径修改后，手动重新生成子任务对，并替换工作区中的同源子任务对。
 - 任务组 JSON 和同名 `*.workspace.json` 建议一起保存。

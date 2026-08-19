@@ -60,6 +60,8 @@ python3 -m pip install --user pyinstaller flask pyyaml
 bash build_linux.sh
 ```
 
+Linux 构建会先编译 `cpp/outdoor_pcd_to_pgm.cpp` 的 OpenMP 核心，并将 `outdoor_pcd_to_pgm` 一起放入最终包中。室外 PCD 转换页面检测到该二进制后会自动使用 C++ 后端；未构建时才回退到 Python 实现。
+
 打包成功后，输出目录为：
 
 ```text
@@ -289,4 +291,3 @@ RY-Robot-Tool-Hub/
 
 - Python tests: `38 passed`
 - Frontend tests: `50 passed`
-

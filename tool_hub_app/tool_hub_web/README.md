@@ -12,6 +12,7 @@
 - `Virtual Wall Builder`
 - `PCD to 2D Map`
 - `PCD Chunker`
+- `Outdoor PCD to PGM`
 
 详细使用说明请看：
 
@@ -95,6 +96,7 @@ tool_hub_app/tool_hub_web/dist/RY-Robot-Tool-Hub/
 - `/waypoint-task-builder`：路点任务模板可视化编辑器
 - `/pcd-to-map`：点云切片转 2D 地图工具
 - `/pcd-chunker`：3D 定位地图分块工具
+- `/outdoor-pcd-to-pgm`：独立室外 PCD2PGM 地图生成工具
 
 ## 说明
 
@@ -104,3 +106,5 @@ tool_hub_app/tool_hub_web/dist/RY-Robot-Tool-Hub/
 - `Waypoint Task Builder` 面向现有 `waypoint_tasks/*.xml` 模板，支持加载、树结构编辑、参数编辑、XML 预览和保存
 - `PCD to 2D Map` 按原 `pcd2pgm` 链路预览不同高度切片并导出 `PGM/YAML`
 - `PCD Chunker` 将整张 `.pcd` 地图切分成 `index.txt + {id}.pcd` 供 3D 定位算法直接使用，并支持按 `workers` 并行导出 chunk
+- `Outdoor PCD to PGM` 对齐 `/mnt/data/pcd2pgm` 的轨迹引导自适应高度滤波、半径离群点滤波和 PGM/YAML 输出
+- Linux 打包时会编译并内置 OpenMP C++ 后端，用于加速大型室外 PCD 的读取和转换

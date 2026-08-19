@@ -4,6 +4,7 @@ import copy
 import json
 import sys
 import threading
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -50,9 +51,18 @@ try:
         render_preview_with_trajectory,
     )
     from tool_hub_web.pcd_chunker import (
+        DEFAULT_LOC_CONFIG_OUTPUT_DIR,
         PcdChunkOptions,
         build_chunk_preview,
         export_chunked_map,
+        generate_loc_config,
+    )
+    from tool_hub_web.outdoor_pcd_to_pgm import (
+        OutdoorPcdToPgmOptions,
+        convert_outdoor_pcd_to_pgm,
+        convert_outdoor_pcd_to_pgm_cpp,
+        export_outdoor_pcd_to_pgm,
+        find_cpp_backend,
     )
     from tool_hub_web.subtask_composer import (
         build_return_subtask,
@@ -96,9 +106,18 @@ except ModuleNotFoundError:
         render_preview_with_trajectory,
     )
     from tool_hub_web.pcd_chunker import (
+        DEFAULT_LOC_CONFIG_OUTPUT_DIR,
         PcdChunkOptions,
         build_chunk_preview,
         export_chunked_map,
+        generate_loc_config,
+    )
+    from tool_hub_web.outdoor_pcd_to_pgm import (
+        OutdoorPcdToPgmOptions,
+        convert_outdoor_pcd_to_pgm,
+        convert_outdoor_pcd_to_pgm_cpp,
+        export_outdoor_pcd_to_pgm,
+        find_cpp_backend,
     )
     from tool_hub_web.subtask_composer import (
         build_return_subtask,
@@ -187,6 +206,14 @@ def create_app(config=None):
                 result = build_pcd_preview_payload(payload, job_id)
             elif kind == "export":
                 result = build_pcd_export_payload(payload, job_id)
+            elif kind == "chunk_preview":
+                result = build_chunk_preview_payload(payload, job_id)
+            elif kind == "chunk_export":
+                result = build_chunk_export_payload(payload, job_id)
+            elif kind == "outdoor_preview":
+                result = build_outdoor_preview_payload(payload, job_id)
+            elif kind == "outdoor_export":
+                result = build_outdoor_export_payload(payload, job_id)
             else:
                 raise ValueError(f"Unsupported PCD job kind: {kind}")
             update_pcd_job(
@@ -196,7 +223,7 @@ def create_app(config=None):
                 message="处理完成",
                 result=result,
             )
-        except (ValueError, TypeError, KeyError) as exc:
+        except Exception as exc:  # keep failures visible through the job endpoint
             update_pcd_job(
                 job_id,
                 status="failed",
@@ -373,7 +400,101 @@ def create_app(config=None):
             start_z=float(payload.get("start_z", 0.0)),
             force=bool(payload.get("force", False)),
             workers=parse_optional_positive_int(payload.get("workers"), 1),
+            cache_mb=parse_optional_positive_int(payload.get("cache_mb"), 2048),
         )
+
+    def outdoor_pcd_to_pgm_options_from_payload(payload, pcd_path=None):
+        trajectory_path = payload.get("trajectory_pcd_path", "")
+        if not trajectory_path and pcd_path is not None:
+            discovered_trajectory = find_trajectory_pcd(pcd_path)
+            trajectory_path = str(discovered_trajectory) if discovered_trajectory else ""
+        return OutdoorPcdToPgmOptions(
+            z_min=float(payload.get("z_min", 0.0)),
+            z_max=float(payload.get("z_max", 0.4)),
+            flag_pass_through=bool(payload.get("flag_pass_through", False)),
+            radius=float(payload.get("radius", 0.5)),
+            min_neighbors=int(payload.get("min_neighbors", 10)),
+            resolution=float(payload.get("resolution", 0.05)),
+            trajectory_pcd_path=Path(trajectory_path).expanduser().resolve() if trajectory_path else None,
+            sensor_height=float(payload.get("sensor_height", 0.5)),
+            trajectory_search_radius=float(payload.get("trajectory_search_radius", 2.0)),
+        )
+
+    def build_outdoor_preview_payload(payload, job_id=None):
+        update_pcd_job(job_id, progress=10, message="读取室外 PCD") if job_id else None
+        pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+        update_pcd_job(job_id, progress=25, message="生成室外地图") if job_id else None
+        options = outdoor_pcd_to_pgm_options_from_payload(payload, pcd_path)
+        if find_cpp_backend():
+            with tempfile.TemporaryDirectory(prefix="outdoor-pcd-preview-") as temp_dir:
+                result, _ = convert_outdoor_pcd_to_pgm_cpp(pcd_path, Path(temp_dir), "preview", options)
+        else:
+            result = convert_outdoor_pcd_to_pgm(pcd_path, options)
+        update_pcd_job(job_id, progress=95, message="准备预览") if job_id else None
+        return {"ok": True, "result": result.to_preview_dict()}
+
+    def build_outdoor_export_payload(payload, job_id=None):
+        update_pcd_job(job_id, progress=10, message="读取室外 PCD") if job_id else None
+        pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+        output_dir = resolve_user_path(payload.get("output_dir", ""), "output_dir")
+        update_pcd_job(job_id, progress=25, message="生成室外地图") if job_id else None
+        options = outdoor_pcd_to_pgm_options_from_payload(payload, pcd_path)
+        map_name = payload.get("map_name", "outdoor_map")
+        if find_cpp_backend():
+            result, exported = convert_outdoor_pcd_to_pgm_cpp(pcd_path, output_dir, map_name, options)
+        else:
+            result = convert_outdoor_pcd_to_pgm(pcd_path, options)
+            exported = export_outdoor_pcd_to_pgm(result, output_dir, map_name)
+        update_pcd_job(job_id, progress=90, message="写出 PGM/YAML") if job_id else None
+        return {"ok": True, "result": result.to_preview_dict(), "exported": exported}
+
+    def build_chunk_preview_payload(payload, job_id=None):
+        update_pcd_job(job_id, progress=10, message="读取 PCD 分块参数") if job_id else None
+        pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+        output_dir = resolve_user_path(payload.get("output_dir", ""), "output_dir")
+        update_pcd_job(job_id, progress=25, message="生成分块预览") if job_id else None
+        preview = build_chunk_preview(
+            pcd_path,
+            output_dir,
+            pcd_chunker_options_from_payload(payload),
+        )
+        update_pcd_job(job_id, progress=95, message="准备分块结果") if job_id else None
+        return {"ok": True, "preview": preview.to_dict()}
+
+    def maybe_generate_chunk_loc_config(payload, output_dir):
+        config_name = str(payload.get("loc_config_name", "")).strip()
+        if not config_name:
+            return None
+        category = str(payload.get("map_category", "outdoor")).strip().lower()
+        config_path = generate_loc_config(
+            category,
+            output_dir,
+            config_name,
+            config_output_dir=DEFAULT_LOC_CONFIG_OUTPUT_DIR,
+        )
+        return {
+            "map_category": category,
+            "path": str(config_path),
+            "file_name": config_path.name,
+        }
+
+    def build_chunk_export_payload(payload, job_id=None):
+        update_pcd_job(job_id, progress=10, message="读取 PCD 分块参数") if job_id else None
+        pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+        output_dir = resolve_user_path(payload.get("output_dir", ""), "output_dir")
+        update_pcd_job(job_id, progress=25, message="导出 PCD 分块") if job_id else None
+        preview = export_chunked_map(
+            pcd_path,
+            output_dir,
+            pcd_chunker_options_from_payload(payload),
+        )
+        update_pcd_job(job_id, progress=90, message="生成定位配置") if job_id else None
+        loc_config = maybe_generate_chunk_loc_config(payload, output_dir)
+        update_pcd_job(job_id, progress=95, message="准备分块结果") if job_id else None
+        result = {"ok": True, "preview": preview.to_dict()}
+        if loc_config:
+            result["loc_config"] = loc_config
+        return result
 
     @app.get("/hub-static/<path:filename>")
     def hub_static(filename):
@@ -410,6 +531,10 @@ def create_app(config=None):
     @app.get("/pcd-chunker")
     def pcd_chunker_page():
         return send_from_directory(STATIC_DIR, "pcd-chunker.html")
+
+    @app.get("/outdoor-pcd-to-pgm")
+    def outdoor_pcd_to_pgm_page():
+        return send_from_directory(STATIC_DIR, "outdoor-pcd-to-pgm.html")
 
     @app.get("/subtask-composer")
     def subtask_composer_page():
@@ -453,6 +578,10 @@ def create_app(config=None):
 
     @app.get("/pcd-chunker/api/runtime_config")
     def pcd_chunker_runtime_config():
+        return jsonify({"default_root": str(DEFAULT_USER_BROWSE_ROOT)})
+
+    @app.get("/outdoor-pcd-to-pgm/api/runtime_config")
+    def outdoor_pcd_to_pgm_runtime_config():
         return jsonify({"default_root": str(DEFAULT_USER_BROWSE_ROOT)})
 
     @app.get("/subtask-composer/api/runtime_config")
@@ -679,6 +808,70 @@ def create_app(config=None):
         except ValueError as exc:
             return json_error(str(exc), 400)
 
+    @app.post("/outdoor-pcd-to-pgm/api/browse")
+    def outdoor_pcd_to_pgm_browse():
+        raw_path = (request.get_json(silent=True) or {}).get("path", str(DEFAULT_USER_BROWSE_ROOT))
+        try:
+            return jsonify(browse_absolute_path(raw_path, DEFAULT_USER_BROWSE_ROOT))
+        except ValueError as exc:
+            return json_error(str(exc), 400)
+
+    @app.post("/outdoor-pcd-to-pgm/api/preview")
+    def outdoor_pcd_to_pgm_preview():
+        payload = request.get_json(silent=True) or {}
+        try:
+            pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+            result = convert_outdoor_pcd_to_pgm(
+                pcd_path,
+                outdoor_pcd_to_pgm_options_from_payload(payload, pcd_path),
+            )
+        except (ValueError, TypeError, RuntimeError) as exc:
+            return json_error(str(exc), 400)
+        return jsonify({"ok": True, "result": result.to_preview_dict()})
+
+    @app.post("/outdoor-pcd-to-pgm/api/preview_job")
+    def outdoor_pcd_to_pgm_preview_job():
+        job = create_pcd_job("outdoor_preview", request.get_json(silent=True) or {})
+        return jsonify({"job_id": job["id"], "status": job["status"], "progress": job["progress"]}), 202
+
+    @app.get("/outdoor-pcd-to-pgm/api/preview_job/<job_id>")
+    def outdoor_pcd_to_pgm_preview_job_status(job_id):
+        job = get_pcd_job(job_id)
+        if not job:
+            return json_error("job not found", 404)
+        return jsonify(job)
+
+    @app.post("/outdoor-pcd-to-pgm/api/export")
+    def outdoor_pcd_to_pgm_export():
+        payload = request.get_json(silent=True) or {}
+        try:
+            pcd_path = resolve_user_path(payload.get("pcd_path", ""), "pcd_path")
+            output_dir = resolve_user_path(payload.get("output_dir", ""), "output_dir")
+            result = convert_outdoor_pcd_to_pgm(
+                pcd_path,
+                outdoor_pcd_to_pgm_options_from_payload(payload, pcd_path),
+            )
+            exported = export_outdoor_pcd_to_pgm(
+                result,
+                output_dir,
+                payload.get("map_name", "outdoor_map"),
+            )
+        except (ValueError, TypeError, RuntimeError) as exc:
+            return json_error(str(exc), 400)
+        return jsonify({"ok": True, "result": result.to_preview_dict(), "exported": exported})
+
+    @app.post("/outdoor-pcd-to-pgm/api/export_job")
+    def outdoor_pcd_to_pgm_export_job():
+        job = create_pcd_job("outdoor_export", request.get_json(silent=True) or {})
+        return jsonify({"job_id": job["id"], "status": job["status"], "progress": job["progress"]}), 202
+
+    @app.get("/outdoor-pcd-to-pgm/api/export_job/<job_id>")
+    def outdoor_pcd_to_pgm_export_job_status(job_id):
+        job = get_pcd_job(job_id)
+        if not job:
+            return json_error("job not found", 404)
+        return jsonify(job)
+
     @app.post("/pcd-chunker/api/preview")
     def pcd_chunker_preview():
         payload = request.get_json(silent=True) or {}
@@ -705,9 +898,37 @@ def create_app(config=None):
                 output_dir,
                 pcd_chunker_options_from_payload(payload),
             )
+            loc_config = maybe_generate_chunk_loc_config(payload, output_dir)
         except (ValueError, TypeError, RuntimeError) as exc:
             return json_error(str(exc), 400)
-        return jsonify({"ok": True, "preview": preview.to_dict()})
+        result = {"ok": True, "preview": preview.to_dict()}
+        if loc_config:
+            result["loc_config"] = loc_config
+        return jsonify(result)
+
+    @app.post("/pcd-chunker/api/preview_job")
+    def pcd_chunker_preview_job():
+        job = create_pcd_job("chunk_preview", request.get_json(silent=True) or {})
+        return jsonify({"job_id": job["id"], "status": job["status"], "progress": job["progress"]}), 202
+
+    @app.get("/pcd-chunker/api/preview_job/<job_id>")
+    def pcd_chunker_preview_job_status(job_id):
+        job = get_pcd_job(job_id)
+        if not job:
+            return json_error("job not found", 404)
+        return jsonify(job)
+
+    @app.post("/pcd-chunker/api/export_job")
+    def pcd_chunker_export_job():
+        job = create_pcd_job("chunk_export", request.get_json(silent=True) or {})
+        return jsonify({"job_id": job["id"], "status": job["status"], "progress": job["progress"]}), 202
+
+    @app.get("/pcd-chunker/api/export_job/<job_id>")
+    def pcd_chunker_export_job_status(job_id):
+        job = get_pcd_job(job_id)
+        if not job:
+            return json_error("job not found", 404)
+        return jsonify(job)
 
     @app.post("/virtual-wall-builder/api/save")
     def virtual_wall_builder_save():
